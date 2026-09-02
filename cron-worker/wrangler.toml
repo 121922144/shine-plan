@@ -1,0 +1,9 @@
+name = "bag-plan-reminder-cron"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+SITE_DISPATCH_URL = "https://replace-after-sites-deploy.example"

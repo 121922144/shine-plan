@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <rect width="1200" height="900" fill="white"/>
+  <text x="600" y="58" text-anchor="middle" font-family="Microsoft YaHei, sans-serif" font-size="38" font-weight="700" fill="#111">五年级课程表</text>
+  <g stroke="#222" stroke-width="3" fill="none">
+    <rect x="60" y="90" width="1080" height="760"/>
+    <path d="M180 90v760M372 90v760M564 90v760M756 90v760M948 90v760"/>
+    <path d="M60 170h1080M60 255h1080M60 340h1080M60 425h1080M60 510h1080M60 595h1080M60 680h1080M60 765h1080"/>
+  </g>
+  <g font-family="Microsoft YaHei, sans-serif" font-size="29" fill="#111" text-anchor="middle" dominant-baseline="middle">
+    <text x="120" y="130">节次</text>
+    <text x="276" y="130">星期一</text><text x="468" y="130">星期二</text><text x="660" y="130">星期三</text><text x="852" y="130">星期四</text><text x="1044" y="130">星期五</text>
+    <text x="120" y="212">1</text><text x="120" y="297">2</text><text x="120" y="382">3</text><text x="120" y="467">4</text>
+    <text x="120" y="552">5</text><text x="120" y="637">6</text><text x="120" y="722">7</text><text x="120" y="807">8</text>
+    <text x="276" y="212">语文</text><text x="468" y="212">数学</text><text x="660" y="212">英语</text><text x="852" y="212">科学</text><text x="1044" y="212">语文</text>
+    <text x="276" y="297">数学</text><text x="468" y="297">语文</text><text x="660" y="297">数学</text><text x="852" y="297">语文</text><text x="1044" y="297">数学</text>
+    <text x="276" y="382">英语</text><text x="468" y="382">体育</text><text x="660" y="382">语文</text><text x="852" y="382">英语</text><text x="1044" y="382">音乐</text>
+    <text x="276" y="467">美术</text><text x="468" y="467">科学</text><text x="660" y="467">体育</text><text x="852" y="467">数学</text><text x="1044" y="467">班会</text>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.vinext/
+.next/
+.wrangler/
+*.log
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+*.traineddata
+.env
+.env.*
+!.env.example
+cron-worker/.dev.vars
+site-build.tar.gz
