@@ -2,7 +2,7 @@
   "id": "/",
   "name": "书包计划",
   "short_name": "书包计划",
-  "description": "每天提醒你明天要带哪些书",
+  "description": "快速查看今天和明天的课程，记录临时提醒",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
