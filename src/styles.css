@@ -16,16 +16,16 @@
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; min-height: 100%; background: #e9e5dc; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 15% 5%, #faf8f2, transparent 32%), #e9e5dc; }
+html { min-width: 320px; height: 100%; overflow: hidden; background: #e9e5dc; }
+body { margin: 0; min-width: 320px; height: 100%; overflow: hidden; overscroll-behavior: none; background: radial-gradient(circle at 15% 5%, #faf8f2, transparent 32%), #e9e5dc; }
 button, input { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible { outline: 3px solid rgba(244, 185, 66, 0.45); outline-offset: 2px; }
 
-.app-shell { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 18px; }
-.phone-frame { position: relative; width: min(100%, 460px); min-height: calc(100vh - 36px); background: var(--paper); border-radius: 32px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid rgba(255,255,255,.75); }
-.page-content { min-height: calc(100vh - 196px); padding: 20px 22px 110px; }
-.topbar { height: 78px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; padding: 12px 20px; background: rgba(247, 244, 237, .92); border-bottom: 1px solid rgba(222, 216, 204, .7); }
+.app-shell { height: 100vh; height: 100dvh; min-height: 0; display: flex; align-items: stretch; justify-content: center; padding: 18px; overflow: hidden; }
+.phone-frame { position: relative; width: min(100%, 460px); height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--paper); border-radius: 32px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid rgba(255,255,255,.75); }
+.page-content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 20px 22px 24px; }
+.topbar { flex: 0 0 78px; height: 78px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; padding: 12px 20px; background: rgba(247, 244, 237, .92); border-bottom: 1px solid rgba(222, 216, 204,.7); }
 .brand-mark { width: 39px; height: 39px; display: grid; place-items: center; background: var(--yellow); border-radius: 13px 13px 9px 13px; color: var(--ink); transform: rotate(-2deg); }
 .topbar h1 { font-size: 18px; line-height: 1.1; margin: 3px 0 0; letter-spacing: .02em; }
 .eyebrow { color: #9b7a34; font-size: 10px; letter-spacing: .18em; font-weight: 700; margin: 0; }
@@ -126,7 +126,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(244, 185, 66
 .danger-action { width: 100%; height: 48px; background: #fff1ed; color: #b75543; border-radius: 14px; }
 .local-note { text-align: center; color: #aaa49a; font-size: 11px; }
 
-.bottom-nav { position: absolute; bottom: 0; left: 0; right: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr); padding: 9px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(218,211,199,.9); background: rgba(255,253,248,.94); backdrop-filter: blur(15px); }
+.bottom-nav { position: relative; flex: 0 0 auto; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr); padding: 9px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(218,211,199,.9); background: rgba(255,253,248,.94); backdrop-filter: blur(15px); }
 .nav-button { position: relative; border: 0; background: transparent; padding: 5px 0 2px; color: #a39f96; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; }
 .nav-button svg { width: 21px; height: 21px; stroke-width: 1.9; }
 .nav-button.active { color: var(--ink); font-weight: 700; }
@@ -186,9 +186,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(244, 185, 66
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } }
 
 @media (max-width: 520px) {
-  .app-shell { padding: 0; display: block; }
-  .phone-frame { width: 100%; min-height: 100vh; border-radius: 0; border: 0; box-shadow: none; }
-  .page-content { min-height: calc(100vh - 160px); }
+  .app-shell { padding: 0; }
+  .phone-frame { width: 100%; height: 100%; min-height: 0; border-radius: 0; border: 0; box-shadow: none; }
+  .page-content { min-height: 0; }
 }
 
 @media (max-width: 360px) {

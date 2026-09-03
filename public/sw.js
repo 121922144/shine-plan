@@ -1,4 +1,4 @@
-const CACHE = 'bag-plan-v3'
+const CACHE = 'bag-plan-v4'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png']
 
 self.addEventListener('install', (event) => {
