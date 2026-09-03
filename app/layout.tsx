@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import '../src/styles.css'
+import criticalStyles from '../src/styles.css?inline'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_ORIGIN || 'http://localhost:5190'),
@@ -29,5 +29,10 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body>{children}</body></html>
+  return (
+    <html lang="zh-CN">
+      <head><style dangerouslySetInnerHTML={{ __html: criticalStyles }} /></head>
+      <body>{children}</body>
+    </html>
+  )
 }
