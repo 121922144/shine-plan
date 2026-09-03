@@ -1,24 +1,54 @@
-const CACHE = 'bag-plan-v1'
+const CACHE = 'bag-plan-v2'
+const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/', '/manifest.webmanifest', '/pwa-192x192.png'])))
+  event.waitUntil(caches.open(CACHE).then((cache) => Promise.all(APP_SHELL.map((url) => cache.add(url)))))
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))))
-  self.clients.claim()
+  event.waitUntil((async () => {
+    await Promise.all((await caches.keys()).filter((key) => key !== CACHE).map((key) => caches.delete(key)))
+    if (self.registration.navigationPreload) await self.registration.navigationPreload.enable()
+    await self.clients.claim()
+  })())
 })
+
+async function updateCache(cache, request, preloadResponse) {
+  const response = preloadResponse || await fetch(request)
+  if (response?.ok) await cache.put(request, response.clone())
+  return response
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request
   const url = new URL(request.url)
-  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
-  event.respondWith(fetch(request).then((response) => {
-    const copy = response.clone()
-    caches.open(CACHE).then((cache) => cache.put(request, copy))
-    return response
-  }).catch(() => caches.match(request).then((cached) => cached || caches.match('/'))))
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname === '/sw.js') return
+
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE)
+      const cached = await cache.match(request) || await cache.match('/')
+      const network = updateCache(cache, request, await event.preloadResponse)
+      if (cached) {
+        event.waitUntil(network.catch(() => undefined))
+        return cached
+      }
+      return network
+    })())
+    return
+  }
+
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE)
+    const cached = await cache.match(request)
+    const network = updateCache(cache, request)
+    if (cached) {
+      event.waitUntil(network.catch(() => undefined))
+      return cached
+    }
+    return network
+  })())
 })
 
 self.addEventListener('push', (event) => {

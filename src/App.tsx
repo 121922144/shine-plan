@@ -947,7 +947,7 @@ function SettingsPage({ reminder, onReminderChange, onEnable, onDisable, onCalen
   )
 }
 
-function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: Slot[]; onClose: () => void; onSave: (slots: Slot[], mode: 'replace' | 'append') => void }) {
+export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: Slot[]; onClose: () => void; onSave: (slots: Slot[], mode: 'replace' | 'append') => void }) {
   const [step, setStep] = useState<ImportStep>('pick')
   const [preview, setPreview] = useState('')
   const [file, setFile] = useState<File | null>(null)
