@@ -9,7 +9,7 @@ export const devices = sqliteTable('devices', {
 export const deviceStates = sqliteTable('device_states', {
   deviceId: text('device_id').primaryKey().references(() => devices.id, { onDelete: 'cascade' }),
   slotsJson: text('slots_json').notNull().default('[]'),
-  booksJson: text('books_json').notNull().default('{}'),
+  notesJson: text('notes_json').notNull().default('[]'),
   reminderEnabled: integer('reminder_enabled', { mode: 'boolean' }).notNull().default(false),
   reminderTime: text('reminder_time').notNull().default('20:00'),
   timezone: text('timezone').notNull().default('Asia/Shanghai'),

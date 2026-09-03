@@ -10,8 +10,8 @@ export async function POST() {
   await db.batch([
     db.prepare('INSERT INTO devices (id, token_hash, created_at) VALUES (?, ?, ?)').bind(id, hash, now),
     db.prepare(`INSERT INTO device_states
-      (device_id, slots_json, books_json, reminder_enabled, reminder_time, timezone, last_sent, updated_at)
-      VALUES (?, '[]', '{}', 0, '20:00', 'Asia/Shanghai', '', 0)`)
+      (device_id, slots_json, notes_json, reminder_enabled, reminder_time, timezone, last_sent, updated_at)
+      VALUES (?, '[]', '[]', 0, '20:00', 'Asia/Shanghai', '', 0)`)
       .bind(id),
   ])
   return json({ token }, { status: 201 })

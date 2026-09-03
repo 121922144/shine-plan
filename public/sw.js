@@ -1,4 +1,4 @@
-const CACHE = 'bag-plan-v4'
+const CACHE = 'bag-plan-v5'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png']
 
 self.addEventListener('install', (event) => {
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (event) => {
 })
 
 self.addEventListener('push', (event) => {
-  let payload = { title: '该收拾明天的书包啦', body: '打开书包计划查看明日清单', url: '/' }
+  let payload = { title: '明天的课程提醒', body: '打开书包计划查看明天课程', url: '/' }
   try { payload = { ...payload, ...event.data.json() } } catch {}
   event.waitUntil(self.registration.showNotification(payload.title, {
     body: payload.body,
