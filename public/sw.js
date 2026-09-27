@@ -1,5 +1,18 @@
-const CACHE = 'bag-plan-v5'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png']
+const CACHE = 'bag-plan-v12'
+const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png', '/backpack-mascot.png', '/home-hero-decorations.png?v=20260904-2']
+const IS_LOCAL_DEVELOPMENT = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname) && self.location.port === '5190'
+
+if (IS_LOCAL_DEVELOPMENT) {
+  self.addEventListener('install', () => self.skipWaiting())
+  self.addEventListener('activate', (event) => {
+    event.waitUntil((async () => {
+      await Promise.all((await caches.keys()).map((key) => caches.delete(key)))
+      const windows = await self.clients.matchAll({ type: 'window' })
+      await self.registration.unregister()
+      await Promise.all(windows.map((client) => 'navigate' in client ? client.navigate(client.url) : undefined))
+    })())
+  })
+} else {
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => Promise.all(APP_SHELL.map((url) => cache.add(url)))))
@@ -52,7 +65,7 @@ self.addEventListener('fetch', (event) => {
 })
 
 self.addEventListener('push', (event) => {
-  let payload = { title: '明天的课程提醒', body: '打开书包计划查看明天课程', url: '/' }
+  let payload = { title: '明天的课程提醒', body: '打开闪闪计划查看明天课程', url: '/' }
   try { payload = { ...payload, ...event.data.json() } } catch {}
   event.waitUntil(self.registration.showNotification(payload.title, {
     body: payload.body,
@@ -72,3 +85,4 @@ self.addEventListener('notificationclick', (event) => {
     return self.clients.openWindow(target)
   }))
 })
+}

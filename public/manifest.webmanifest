@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "书包计划",
-  "short_name": "书包计划",
+  "name": "闪闪计划",
+  "short_name": "闪闪计划",
   "description": "快速查看今天和明天的课程，记录临时提醒",
   "start_url": "/",
   "scope": "/",
@@ -10,8 +10,8 @@
   "theme_color": "#f6f3ec",
   "background_color": "#f6f3ec",
   "icons": [
-    { "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/pwa-512x512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/maskable-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/shine-icon-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/shine-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/shine-maskable-icon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

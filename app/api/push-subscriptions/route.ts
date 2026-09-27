@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     .bind(crypto.randomUUID(), device.id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, Date.now()).run()
   const response = await sendWebPush(
     { endpoint: subscription.endpoint, expirationTime: subscription.expirationTime ?? null, keys: subscription.keys },
-    { title: '书包计划提醒已开启', body: '以后会按时提醒你第二天的课程和临时备注。', url: '/', tag: 'bag-plan-enabled' },
+    { title: '闪闪计划提醒已开启', body: '以后会按时提醒你第二天的课程和临时备注。', url: '/', tag: 'bag-plan-enabled' },
   )
   if (!response.ok) return json({ error: '订阅已保存，但测试通知发送失败' }, { status: 502 })
   await getD1().prepare('UPDATE push_subscriptions SET last_success_at = ? WHERE endpoint = ?')

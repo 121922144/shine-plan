@@ -1,7 +1,13 @@
 'use client'
 
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { BookOpen, CalendarDays, Camera, Check, ClipboardList, Home, ImagePlus, Pencil, Pin, Plus, Settings, Share2, Sparkles, Trash2 } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { CalendarDays, Camera, Check, Home, Settings, Sparkles } from 'lucide-react'
+import { HomeHero } from './components/home/HomeHero'
+import { DailyGoalsCard } from './components/home/DailyGoalsCard'
+import { HomeCourseCard } from './components/home/HomeCourseCard'
+import { resolveCourseIcon } from './features/home/courseIconMap'
+import { StarRewardBanner } from './components/home/StarRewardBanner'
+import { mockCourseStatuses } from './features/home/homeMock'
 import { defaultHomeDay, homeTarget, type DateNote, type HomeDay, type ReminderSettings, type Slot } from './domain'
 
 const loadDeferredViews = () => import('./features/DeferredViews')
@@ -12,7 +18,6 @@ const ImportSheet = lazy(() => import('./features/ImportSheet').then((module) =>
 type Tab = 'home' | 'schedule' | 'settings'
 type CloudState = { hasState: boolean; slots: Slot[]; notes: DateNote[]; reminder: ReminderSettings }
 
-const COLORS = ['#f4b942', '#ef745c', '#79a7a0', '#7d8fc7', '#a97cba', '#d98c56']
 const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder' }
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
@@ -43,86 +48,82 @@ function urlBase64ToArrayBuffer(value: string) {
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0)).buffer
 }
 
-function subjectColor(subject: string) {
-  let score = 0
-  for (const char of subject) score += char.charCodeAt(0)
-  return COLORS[score % COLORS.length]
-}
-
 function HomeSkeleton() {
-  return <div className="home-skeleton" aria-label="正在读取课程"><div className="skeleton-hero" /><div className="skeleton-line skeleton-label" /><div className="skeleton-line skeleton-title" /><div className="skeleton-line skeleton-title short" /><div className="skeleton-line skeleton-copy" /><div className="skeleton-line skeleton-copy short" /><div className="skeleton-button" /></div>
+  return <div className="home-skeleton shine-home-skeleton" aria-label="正在读取课程"><HomeHero loading /><div className="skeleton-task" /><div className="skeleton-section"><div /><div /><div /></div></div>
 }
 
 function PanelSkeleton() {
   return <div className="panel-skeleton" aria-label="正在打开"><div /><div /><div /><div /></div>
 }
 
+function ScheduleSkeleton() {
+  return <section className="schedule-page schedule-skeleton" aria-label="正在打开课表" aria-busy="true">
+    <section className="schedule-banner">
+      <img className="schedule-banner-art" src="/assets/banners/schedule-banner.png" alt="" />
+      <div className="schedule-banner-copy"><h1>我的课表</h1><p>每一天，都安排得闪闪发光</p></div>
+    </section>
+    <div className="schedule-content" aria-hidden="true">
+      <div className="schedule-date-card schedule-skeleton-calendar">
+        <div className="schedule-skeleton-month"><span /><i /><span /></div>
+        <div className="schedule-skeleton-week">{Array.from({ length: 7 }, (_, index) => <div key={index}><i /><b /></div>)}</div>
+      </div>
+      <div className="schedule-skeleton-heading"><div><i /><i /></div><span /></div>
+      <div className="schedule-course-list">{Array.from({ length: 3 }, (_, index) => <div className="schedule-course-card schedule-skeleton-course" key={index}><span className="schedule-skeleton-badge" /><span className="schedule-skeleton-icon" /><span className="schedule-skeleton-lines"><i /><i /></span><span className="schedule-skeleton-status" /></div>)}</div>
+    </div>
+  </section>
+}
+
 function NavButton({ active, label, icon, onClick }: { active: boolean; label: string; icon: React.ReactNode; onClick: () => void }) {
   return <button className={active ? 'nav-button active' : 'nav-button'} onClick={onClick}>{icon}<span>{label}</span></button>
 }
 
-function SmartHome({ allSlots, notes, selectedDay, onSelectedDay, onNotesChange, onImport, onShare }: {
+function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
   allSlots: Slot[]
-  notes: DateNote[]
   selectedDay: HomeDay
   onSelectedDay: (day: HomeDay) => void
-  onNotesChange: (notes: DateNote[]) => void
   onImport: () => void
-  onShare: () => void
 }) {
   const now = new Date()
   const target = homeTarget(now, selectedDay)
   const slots = allSlots.filter((slot) => slot.day === target.weekday).sort((a, b) => a.period - b.period)
-  const dayNotes = notes.filter((note) => note.date === target.dateKey)
-  const [draft, setDraft] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-
-  const saveNote = () => {
-    const text = draft.trim()
-    if (!text) return
-    if (editingId) onNotesChange(notes.map((note) => note.id === editingId ? { ...note, text } : note))
-    else onNotesChange([...notes, { id: uid(), date: target.dateKey, text }])
-    setDraft('')
-    setEditingId(null)
-  }
-  const beginEdit = (note: DateNote) => { setEditingId(note.id); setDraft(note.text) }
-  const cancelEdit = () => { setEditingId(null); setDraft('') }
-
-  if (!allSlots.length) return (
-    <section className="empty-hero">
-      <div className="hero-illustration"><div className="sun-dot" /><div className="backpack"><span /><span /><span /></div></div>
-      <p className="eyebrow">从一张照片开始</p>
-      <h2>打开就知道，<br />今天明天上什么课。</h2>
-      <p className="muted">上传课程表，识别后可以直接校对和修改。</p>
-      <button className="primary-button wide" onClick={onImport}><Camera size={19} />上传课程表</button>
-      <div className="privacy-note"><Sparkles size={16} /><span>图片只在你的设备上识别，不会保存到服务器</span></div>
-    </section>
-  )
+  const [prepared, setPrepared] = useState(false)
 
   return (
-    <section>
-      <div className="home-day-switch" aria-label="选择查看日期">
-        <button className={selectedDay === 'today' ? 'active' : ''} onClick={() => { onSelectedDay('today'); cancelEdit() }}>今天</button>
-        <button className={selectedDay === 'tomorrow' ? 'active' : ''} onClick={() => { onSelectedDay('tomorrow'); cancelEdit() }}>明天</button>
-      </div>
-      <div className="tomorrow-heading"><div><p className="eyebrow">{selectedDay === 'today' ? 'TODAY' : 'TOMORROW'}</p><h2>{target.label} · {target.weekdayLabel}</h2><p>{target.date.getMonth() + 1}月{target.date.getDate()}日</p></div><button className="round-share" onClick={onShare} aria-label={`分享${target.label}课程`}><Share2 size={20} /></button></div>
-      <div className="summary-card"><div><strong>{slots.length}</strong><span>节课</span></div><div className="summary-copy">{slots.length ? `${target.label}的课程已按节次排好` : `${target.label}没有安排课程`}</div><div className="summary-check"><Check size={20} /></div></div>
-      <div className="section-title"><h3>按上课顺序</h3><span>{slots.length ? `共 ${slots.length} 节课` : ''}</span></div>
-      {slots.length === 0 ? <div className="day-off"><span>☁️</span><h3>{target.label}没有课程</h3><p>有临时要准备的东西，可以记在下面</p></div> : (
-        <div className="course-list">{slots.map((slot) => <div className="course-card" key={slot.id}><div className="period-badge" style={{ background: subjectColor(slot.name) }}>第<br /><strong>{slot.period}</strong><br />节</div><div className="course-info"><h3>{slot.name}</h3><p>第 {slot.period} 节课</p></div></div>)}</div>
-      )}
+    <section className="home-page shine-home">
+      <HomeHero />
+      <div className="shine-home-content">
+        <DailyGoalsCard prepared={prepared} onPreparedChange={() => setPrepared((value) => !value)} onViewTomorrow={() => onSelectedDay('tomorrow')} />
 
-      <div className="notes-panel">
-        <div className="section-title notes-title"><h3><Pin size={16} />{target.label}提醒</h3><span>按日期保存</span></div>
-        {dayNotes.length ? <div className="note-list">{dayNotes.map((note) => <div className="note-row" key={note.id}><span>{note.text}</span><button onClick={() => beginEdit(note)} aria-label={`修改${note.text}`}><Pencil size={16} /></button><button onClick={() => { onNotesChange(notes.filter((item) => item.id !== note.id)); if (editingId === note.id) cancelEdit() }} aria-label={`删除${note.text}`}><Trash2 size={16} /></button></div>)}</div> : <div className="note-empty"><ClipboardList size={22} /><span>还没有临时提醒</span></div>}
-        <div className="note-editor"><input value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') saveNote() }} placeholder={editingId ? '修改提醒内容' : '例如：美术课带彩笔'} maxLength={80} /><button onClick={saveNote} disabled={!draft.trim()} aria-label={editingId ? '保存修改' : '添加提醒'}>{editingId ? <Check size={19} /> : <Plus size={19} />}</button></div>
-        {editingId && <button className="cancel-note" onClick={cancelEdit}>取消修改</button>}
+        <div className="shine-section-title">
+          <h2>{selectedDay === 'today' ? '今日课程' : '明日课程'}</h2>
+          {allSlots.length > 0 && <div className="shine-course-tools">
+            <span className="shine-course-date">{target.date.getMonth() + 1}月{target.date.getDate()}日 · {target.weekdayLabel}</span>
+            <div className="shine-day-switch" aria-label="选择查看日期">
+              <button type="button" aria-pressed={selectedDay === 'today'} onClick={() => onSelectedDay('today')}>今天</button>
+              <button type="button" aria-pressed={selectedDay === 'tomorrow'} onClick={() => onSelectedDay('tomorrow')}>明天</button>
+            </div>
+          </div>}
+        </div>
+        {slots.length === 0 ? (allSlots.length > 0 ? <div className="shine-no-course"><span className="shine-no-course-art"><img src="/course-icons/no-course.png" alt="" /></span><h3>{target.label}没有课程</h3><p>可以打开课表查看和调整安排</p></div> : (
+          <article className="shine-course-empty">
+            <span className="shine-course-empty-icon" aria-hidden="true"><CalendarDays size={22} /></span>
+            <h3>从一张课程表开始</h3>
+            <p>上传图片即可自动识别，也可以逐节校对修改</p>
+            <button type="button" onClick={onImport}><Camera size={17} />上传课程表</button>
+            <span className="shine-course-empty-privacy"><Sparkles size={13} />图片只在你的设备上识别，不会上传保存</span>
+          </article>
+        )) : (
+          <><ul className="shine-course-list">{slots.map((slot, index) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={mockCourseStatuses[index % mockCourseStatuses.length]} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>固定作息时间 · 状态为示例</span></p></>
+        )}
+
+        <StarRewardBanner />
       </div>
     </section>
   )
 }
 
 export default function HomeApp() {
+  const pageContentRef = useRef<HTMLDivElement>(null)
   const [booted, setBooted] = useState(false)
   const [tab, setTab] = useState<Tab>('home')
   const [selectedDay, setSelectedDay] = useState<HomeDay>('today')
@@ -150,7 +151,14 @@ export default function HomeApp() {
     window.addEventListener('beforeinstallprompt', onInstall)
     setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent))
     setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone)))
-    const registerWorker = () => navigator.serviceWorker?.register('/sw.js').catch(() => undefined)
+    const registerWorker = () => {
+      if (import.meta.env.DEV) {
+        navigator.serviceWorker?.getRegistrations().then((registrations) => Promise.all(registrations.map((registration) => registration.unregister()))).catch(() => undefined)
+        window.caches?.keys().then((keys) => Promise.all(keys.map((key) => window.caches.delete(key)))).catch(() => undefined)
+        return
+      }
+      navigator.serviceWorker?.register('/sw.js').catch(() => undefined)
+    }
     const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void) => number; cancelIdleCallback?: (id: number) => void }
     const idleId = idleWindow.requestIdleCallback ? idleWindow.requestIdleCallback(registerWorker) : window.setTimeout(registerWorker, 250)
 
@@ -210,10 +218,11 @@ export default function HomeApp() {
     return () => window.clearTimeout(timer)
   }, [toast])
 
-  const target = homeTarget(new Date(), selectedDay)
-  const selectedSlots = useMemo(() => slots.filter((slot) => slot.day === target.weekday).sort((a, b) => a.period - b.period), [slots, target.weekday])
-  const selectedNotes = useMemo(() => notes.filter((note) => note.date === target.dateKey), [notes, target.dateKey])
   const showToast = (message: string) => setToast(message)
+  const selectTab = (nextTab: Tab) => {
+    setTab(nextTab)
+    window.requestAnimationFrame(() => pageContentRef.current?.scrollTo({ top: 0 }))
+  }
 
   const enableReminder = async () => {
     if (isIos && !isStandalone) return showToast('请先添加到主屏幕，再从桌面打开并开启提醒')
@@ -243,14 +252,6 @@ export default function HomeApp() {
     } catch { showToast('提醒已关闭，云端状态稍后同步') }
   }
 
-  const shareCurrentDay = async () => {
-    const courseText = selectedSlots.length ? selectedSlots.map((slot) => `第${slot.period}节 ${slot.name}`).join('\n') : `${target.label}没有课程`
-    const noteText = selectedNotes.length ? `\n${target.label}提醒：${selectedNotes.map((note) => note.text).join('、')}` : ''
-    const text = `${target.label}课程（${target.weekdayLabel}）\n${courseText}${noteText}`
-    if (navigator.share) await navigator.share({ title: `${target.label}课程`, text })
-    else { await navigator.clipboard.writeText(text); showToast('课程已复制') }
-  }
-
   const installApp = async () => {
     if (installPrompt) { await installPrompt.prompt(); setInstallPrompt(null); return }
     showToast('请在浏览器菜单中选择“添加到主屏幕”')
@@ -261,25 +262,24 @@ export default function HomeApp() {
     const start = new Date(); start.setDate(start.getDate() + 1); start.setHours(hour, minute, 0, 0)
     const stamp = start.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
     const end = new Date(start.getTime() + 600000).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
-    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Bag Plan//CN', 'BEGIN:VEVENT', `UID:${uid()}@bag-plan`, `DTSTART:${stamp}`, `DTEND:${end}`, 'RRULE:FREQ=DAILY', 'SUMMARY:查看明天课程', 'DESCRIPTION:打开“书包计划”查看明天的课程和临时提醒。', 'BEGIN:VALARM', 'TRIGGER:-PT0M', 'ACTION:DISPLAY', 'DESCRIPTION:该查看明天的课程啦', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
-    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' })); link.download = '书包计划-每日课程提醒.ics'; link.click(); URL.revokeObjectURL(link.href); showToast('日历提醒已生成')
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Shine Plan//CN', 'BEGIN:VEVENT', `UID:${uid()}@bag-plan`, `DTSTART:${stamp}`, `DTEND:${end}`, 'RRULE:FREQ=DAILY', 'SUMMARY:查看明天课程', 'DESCRIPTION:打开“闪闪计划”查看明天的课程和临时提醒。', 'BEGIN:VALARM', 'TRIGGER:-PT0M', 'ACTION:DISPLAY', 'DESCRIPTION:该查看明天的课程啦', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' })); link.download = '闪闪计划-每日课程提醒.ics'; link.click(); URL.revokeObjectURL(link.href); showToast('日历提醒已生成')
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${tab === 'home' ? ' shine-home-active' : ''}`}>
       <main className="phone-frame">
-        <header className="topbar"><div className="brand-mark"><BookOpen size={20} strokeWidth={2.4} /></div><div><p className="eyebrow">BAG PLAN</p><h1>书包计划</h1></div><button className="icon-button" aria-label="上传课程表" onClick={() => setImportOpen(true)}><ImagePlus size={21} /></button></header>
-        <div className="page-content">
-          {!booted ? <HomeSkeleton /> : tab === 'home' ? <SmartHome allSlots={slots} notes={notes} selectedDay={selectedDay} onSelectedDay={setSelectedDay} onNotesChange={setNotes} onImport={() => setImportOpen(true)} onShare={shareCurrentDay} /> : (
-            <Suspense fallback={<PanelSkeleton />}>
+        <div className="page-content" ref={pageContentRef}>
+          {!booted ? <HomeSkeleton /> : tab === 'home' ? <SmartHome allSlots={slots} selectedDay={selectedDay} onSelectedDay={setSelectedDay} onImport={() => setImportOpen(true)} /> : (
+            <Suspense fallback={tab === 'schedule' ? <ScheduleSkeleton /> : <PanelSkeleton />}>
               {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} />}
               {tab === 'settings' && <SettingsPage reminder={reminder} onReminderChange={setReminder} onEnable={enableReminder} onDisable={disableReminder} onCalendar={downloadCalendar} onInstall={installApp} cloudStatus={cloudStatus} pushStatus={pushStatus} isIos={isIos} isStandalone={isStandalone} onReset={() => { if (!window.confirm('确定清空课程和日期提醒吗？此操作无法撤销。')) return; setSlots([]); setNotes([]); showToast('数据已清空') }} />}
             </Suspense>
           )}
         </div>
-        <nav className="bottom-nav" aria-label="主导航"><NavButton active={tab === 'home'} label="首页" icon={<Home />} onClick={() => setTab('home')} /><NavButton active={tab === 'schedule'} label="课表" icon={<CalendarDays />} onClick={() => setTab('schedule')} /><NavButton active={tab === 'settings'} label="设置" icon={<Settings />} onClick={() => setTab('settings')} /></nav>
+        <nav className="bottom-nav" aria-label="主导航"><NavButton active={tab === 'home'} label="首页" icon={<Home />} onClick={() => selectTab('home')} /><NavButton active={tab === 'schedule'} label="课表" icon={<CalendarDays />} onClick={() => selectTab('schedule')} /><NavButton active={tab === 'settings'} label="设置" icon={<Settings />} onClick={() => selectTab('settings')} /></nav>
       </main>
-      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => { setSlots(mode === 'replace' ? nextSlots : [...slots, ...nextSlots]); setImportOpen(false); setTab('schedule'); showToast('课程表已保存') }} /></Suspense>}
+      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => { setSlots(mode === 'replace' ? nextSlots : [...slots, ...nextSlots]); setImportOpen(false); selectTab('schedule'); showToast('课程表已保存') }} /></Suspense>}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )

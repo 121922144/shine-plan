@@ -21,11 +21,28 @@ function normalizeCourseName(value: string) {
 }
 
 const COURSE_NAMES = [
-  '道德与法治', '综合实践', '信息技术', '心理健康', '劳动技术', '体育与健康',
-  '英语口语', '身心成长', '校内选修课', '基本托管',
+  '道德与法治', '综合实践', '综合实践与劳动', '信息技术', '心理健康', '劳动技术', '体育与健康',
+  '英语口语', '身心成长', '校内选修课', '基本托管', '基本托管A', '延时服务', '素质拓展',
   '语文', '数学', '英语', '物理', '化学', '生物', '地理', '历史', '政治',
   '科学', '体育', '音乐', '美术', '书法', '计算机', '阅读', '劳动', '班会', '自习', '康',
 ]
+
+// 跨列横条（眼保健操/大课间/午休…）的文字会被 OCR 拆碎并混入邻近格，按字符集合整体剥离
+const NOISE_STRIP_NAMES = ['眼保健操', '大课间', '自由阅读', '自主学习', '午餐午休', '午休', '早读', '自律']
+function stripNoiseChars(value: string) {
+  let result = value
+  for (const noise of NOISE_STRIP_NAMES) {
+    const pool = [...noise]
+    let output = ''
+    for (const char of result) {
+      const index = pool.indexOf(char)
+      if (index >= 0) pool.splice(index, 1)
+      else output += char
+    }
+    if (pool.length === 0) result = output
+  }
+  return result
+}
 
 type OcrToken = {
   text: string
@@ -74,17 +91,46 @@ function groupLinePositions(positions: number[]) {
   return groups.map((group) => Math.round(group.reduce((sum, value) => sum + value, 0) / group.length))
 }
 
-function findEvenlySpacedBounds(lines: number[], count: number, width: number) {
+function findEvenlySpacedBounds(lines: number[], count: number, width: number, maxScore = 0.22) {
   let best: { lines: number[]; score: number } | null = null
-  for (let index = 0; index <= lines.length - count; index += 1) {
-    const candidate = lines.slice(index, index + count)
-    const gaps = candidate.slice(1).map((value, gapIndex) => value - candidate[gapIndex])
-    const mean = gaps.reduce((sum, value) => sum + value, 0) / gaps.length
-    if (mean < width * 0.08 || candidate.at(-1)! - candidate[0] < width * 0.6) continue
-    const score = gaps.reduce((sum, value) => sum + Math.abs(value - mean), 0) / gaps.length / mean
-    if (!best || score < best.score) best = { lines: candidate, score }
+  for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
+    for (let endIndex = startIndex + count - 1; endIndex < lines.length; endIndex += 1) {
+      const start = lines[startIndex]
+      const end = lines[endIndex]
+      const span = end - start
+      const step = span / (count - 1)
+      if (step < width * 0.08 || span < width * 0.6) continue
+      const candidate = [start]
+      let previousIndex = startIndex
+      let valid = true
+      for (let position = 1; position < count - 1; position += 1) {
+        const expected = start + step * position
+        const lastAllowed = endIndex - (count - 1 - position)
+        let selectedIndex = -1
+        let selectedDistance = Number.POSITIVE_INFINITY
+        for (let index = previousIndex + 1; index <= lastAllowed; index += 1) {
+          const distance = Math.abs(lines[index] - expected)
+          if (distance < selectedDistance) {
+            selectedIndex = index
+            selectedDistance = distance
+          }
+        }
+        if (selectedIndex < 0) {
+          valid = false
+          break
+        }
+        candidate.push(lines[selectedIndex])
+        previousIndex = selectedIndex
+      }
+      if (!valid) continue
+      candidate.push(end)
+      const score = candidate.reduce((sum, value, index) => (
+        sum + Math.abs(value - (start + step * index)) / step
+      ), 0) / count
+      if (!best || score < best.score) best = { lines: candidate, score }
+    }
   }
-  return best && best.score < 0.22 ? best.lines : null
+  return best && best.score < maxScore ? best.lines : null
 }
 
 function editDistance(left: string, right: string) {
@@ -106,28 +152,112 @@ function editDistance(left: string, right: string) {
 }
 
 function matchCourseName(value: string) {
-  const clean = normalizeCourseName(value).replace(/[^\p{L}\p{N}]/gu, '')
-  if (!clean || /午休|大课间|自由阅读|教师|老师|陈涛|杨宏业/.test(clean)) return ''
-  const exact = COURSE_NAMES.find((course) => clean.includes(course))
+  const clean = stripNoiseChars(normalizeCourseName(value).replace(/[^\p{L}\p{N}]/gu, ''))
+  if (!clean || /午休|大课间|自由阅读|眼保健操|教师|老师|陈涛|杨宏业/.test(clean)) return ''
+  // 课程表中“康”是一个完整的课程名，不能因为它是单字而被当作 OCR 噪声丢弃。
+  if (clean === '康') return '康'
+  // 字符集乱序整词匹配：OCR 会打乱同一格的字符顺序（如「时延服务」「与综合劳动实践」），
+  // 整词同字符集比子串匹配更可靠，优先处理
+  const sortedClean = [...clean].sort().join('')
+  const charsetMatch = COURSE_NAMES
+    .filter((course) => course.length >= 2 && course.length === clean.length && [...course].sort().join('') === sortedClean)
+  if (charsetMatch.length) return charsetMatch[0]
+  // 优先最长子串，并排除单字课程名（避免「班使健康」被错误匹配成「康」而导致整格被丢弃）
+  const exact = COURSE_NAMES
+    .filter((course) => course.length >= 2)
+    .sort((a, b) => b.length - a.length)
+    .find((course) => clean.includes(course))
   if (exact) return exact
   if (clean.length === 1) {
-    const suffixMatches = COURSE_NAMES.filter((course) => course.endsWith(clean))
-    if (suffixMatches.length === 1) return suffixMatches[0]
+    const characterMatches = COURSE_NAMES.filter((course) => course.length >= 2 && (course.startsWith(clean) || course.endsWith(clean)))
+    if (characterMatches.length === 1) return characterMatches[0]
     return ''
   }
   const ranked = COURSE_NAMES
-    .filter((course) => Math.abs(course.length - clean.length) <= 1)
+    .filter((course) => course.length >= 2 && Math.abs(course.length - clean.length) <= 1)
     .map((course) => ({ course, distance: editDistance(clean, course) }))
     .sort((left, right) => left.distance - right.distance)
   const closest = ranked[0]
-  const allowedDistance = clean.length <= 4 ? 1 : Math.max(1, Math.floor(clean.length * 0.28))
-  return closest && closest.distance <= allowedDistance ? closest.course : ''
+  const allowedDistance = Math.max(1, Math.floor(clean.length * 0.28))
+  // 残缺的两个字不能随意替换两个字；多个课程同样接近时也不猜第一个。
+  return closest && closest.distance <= allowedDistance && closest.distance < (ranked[1]?.distance ?? Infinity)
+    ? closest.course : ''
+}
+
+function courseEvidence(raw: string, course: string) {
+  if (!course) return 0
+  const clean = normalizeCourseName(raw).replace(/[^\p{L}\p{N}]/gu, '')
+  const names = course.split(' / ').map((name) => name.replace(/[^\p{L}\p{N}]/gu, ''))
+  // 完整文字优先于模糊补字，避免先读到的错字压住后续正确结果。
+  if (names.every((name) => clean.includes(name))) return 3
+  if (names.length === 1 && [...clean].sort().join('') === [...names[0]].sort().join('')) return 3
+  if (COURSE_NAMES.some((name) => name.length >= 2 && clean.includes(name) && course.includes(name))) return 2
+  return 1
+}
+
+function preferCourse(raw: string, candidate: string, current: { name: string; evidence: number }) {
+  const evidence = courseEvidence(raw, candidate)
+  return evidence > current.evidence || (evidence === current.evidence && candidate.length > current.name.length)
+    ? { name: candidate, evidence } : current
+}
+
+function matchGridCourse(value: string) {
+  const compact = normalizeCourseName(value).replace(/\s+/g, '')
+  if (/^康(?:陈[\p{L}]{1,3})?$/u.test(compact)) return '康'
+  if (compact.includes('班会') && compact.includes('心理健康')) {
+    return compact.includes('升旗') ? '班会 · 心理健康（含升旗仪式）' : '班会 · 心理健康'
+  }
+  // 第 7 节有时会在同一个时间段里并列展示两种安排，不能只返回前半个课程名。
+  const hasDelayService = compact.includes('延时服务') || compact.includes('服务延')
+  const hasQualityExtension = compact.includes('素质拓展') || compact.includes('拓展素质')
+  if (hasDelayService && hasQualityExtension) {
+    return '延时服务 / 素质拓展'
+  }
+  if (/基本特色托管选修A|基本托管A.*特色选修|特色选修.*基本托管A/.test(compact)) {
+    return '基本托管A（特色选修）'
+  }
+  // 周二第 6 节是带说明的长课程名。优先保留完整标题，避免被截断成“校内选修课”。
+  if (/基本托管(?:A)?[：:]?校内选修课/.test(compact) || /校内选修课.*基本托管/.test(compact)) {
+    return '基本托管A：校内选修课'
+  }
+  if (/基本托管A/.test(compact)) return '基本托管A'
+  return matchCourseName(compact)
 }
 
 async function canvasToBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('无法生成识别图片')), 'image/png')
   })
+}
+
+async function createOriginalCell(source: HTMLCanvasElement, left: number, top: number, right: number, bottom: number, scale = 1) {
+  // 去掉上下空白及残留竖线。长边线会使 OCR 把窄格里的整行文字当作图形忽略。
+  const width = right - left
+  const height = bottom - top
+  const pixels = source.getContext('2d')!.getImageData(left, top, width, height).data
+  const textRows: number[] = []
+  for (let y = 0; y < height; y += 1) {
+    let ink = 0
+    for (let x = 2; x < width - 2; x += 1) {
+      const offset = (y * width + x) * 4
+      if (Math.max(pixels[offset], pixels[offset + 1], pixels[offset + 2]) < 160) ink += 1
+    }
+    if (ink > Math.max(2, width * 0.04)) textRows.push(y)
+  }
+  if (textRows.length) {
+    bottom = Math.min(bottom, top + textRows.at(-1)! + 3)
+    top += Math.max(0, textRows[0] - 2)
+  }
+  const canvas = document.createElement('canvas')
+  const padding = 12
+  canvas.width = (right - left) * scale + padding * 2
+  canvas.height = (bottom - top) * scale + padding * 2
+  const context = canvas.getContext('2d')!
+  context.fillStyle = 'white'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(source, left, top, right - left, bottom - top,
+    padding, padding, (right - left) * scale, (bottom - top) * scale)
+  return canvasToBlob(canvas)
 }
 
 async function createEnhancedCell(
@@ -165,14 +295,17 @@ async function createEnhancedCell(
   normalized.height = height
   normalized.getContext('2d')!.putImageData(image, 0, 0)
   const enlarged = document.createElement('canvas')
-  enlarged.width = Math.max(700, width * 5)
-  enlarged.height = Math.max(80, Math.round(height * enlarged.width / width))
+  const contentWidth = Math.max(700, width * 5)
+  const contentHeight = Math.max(80, Math.round(height * contentWidth / width))
+  const padding = 32
+  enlarged.width = contentWidth + padding * 2
+  enlarged.height = contentHeight + padding * 2
   const enlargedContext = enlarged.getContext('2d')!
   enlargedContext.imageSmoothingEnabled = true
   enlargedContext.imageSmoothingQuality = 'high'
   enlargedContext.fillStyle = 'white'
   enlargedContext.fillRect(0, 0, enlarged.width, enlarged.height)
-  enlargedContext.drawImage(normalized, 0, 0, enlarged.width, enlarged.height)
+  enlargedContext.drawImage(normalized, padding, padding, contentWidth, contentHeight)
   return canvasToBlob(enlarged)
 }
 
@@ -191,26 +324,47 @@ async function recognizeGridTimetable(
   const image = context.getImageData(0, 0, source.width, source.height)
   const dark = (x: number, y: number) => {
     const offset = (y * source.width + x) * 4
-    return image.data[offset] < 72 && image.data[offset + 1] < 72 && image.data[offset + 2] < 72
+    // 手机截图/压缩图中的表格线经常是抗锯齿灰线，过低阈值会让整张表无法找到网格。
+    return image.data[offset] < 120 && image.data[offset + 1] < 120 && image.data[offset + 2] < 120
+  }
+
+  const longestDarkRun = (length: number, isDark: (position: number) => boolean) => {
+    let best = 0
+    let run = 0
+    let gap = 0
+    for (let position = 0; position < length; position += 1) {
+      if (isDark(position)) {
+        run += gap + 1
+        gap = 0
+      } else if (run > 0 && gap < 1) {
+        gap += 1
+      } else {
+        best = Math.max(best, run)
+        run = 0
+        gap = 0
+      }
+    }
+    return Math.max(best, run)
   }
 
   const verticalPixels: number[] = []
   for (let x = 0; x < source.width; x += 1) {
-    let count = 0
-    for (let y = Math.floor(source.height * 0.12); y < source.height; y += 1) if (dark(x, y)) count += 1
-    if (count > source.height * 0.27) verticalPixels.push(x)
+    const startY = Math.floor(source.height * 0.1)
+    const run = longestDarkRun(source.height - startY, (offset) => dark(x, startY + offset))
+    if (run > source.height * 0.045) verticalPixels.push(x)
   }
   const verticalLines = groupLinePositions(verticalPixels)
-  const dayBounds = findEvenlySpacedBounds(verticalLines, 6, source.width)
+  // 第 7 节会在每个星期格内再分成两格，因此必须允许跳过这些“半列”竖线，
+  // 从候选线中挑出六条真正的星期边界。
+  const dayBounds = findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
   if (!dayBounds) return null
 
   const majorHorizontalPixels: number[] = []
   const minorHorizontalPixels: number[] = []
   for (let y = 0; y < source.height; y += 1) {
-    let count = 0
-    for (let x = 0; x < source.width; x += 1) if (dark(x, y)) count += 1
-    if (count > source.width * 0.52) majorHorizontalPixels.push(y)
-    if (count > source.width * 0.15) minorHorizontalPixels.push(y)
+    const run = longestDarkRun(source.width, (x) => dark(x, y))
+    if (run > source.width * 0.35) majorHorizontalPixels.push(y)
+    if (run > source.width * 0.1) minorHorizontalPixels.push(y)
   }
   const majorLines = groupLinePositions(majorHorizontalPixels)
   const minorLines = groupLinePositions(minorHorizontalPixels)
@@ -237,52 +391,184 @@ async function recognizeGridTimetable(
     return total ? filled / total : 0
   }
 
+  // 空白节次（尤其是第 7 节）也要保留行号。仅看彩色课程格会把整行空课误判成“非课程横条”，
+  // 因此同时检查左侧的“第 N 节/时间”标签。
+  const periodLabelRatio = (top: number, bottom: number) => {
+    let filled = 0
+    let total = 0
+    for (let y = top + 4; y < bottom - 4; y += 2) {
+      for (let x = 28; x < dayBounds[0] - 4; x += 2) {
+        filled += dark(x, y) ? 1 : 0
+        total += 1
+      }
+    }
+    return total ? filled / total : 0
+  }
+
+  const leftStructuralLines = verticalLines.filter((x) => (
+    x > source.width * 0.02 && x < dayBounds[0] - source.width * 0.03
+  ))
+  const periodDivider = leftStructuralLines.length >= 2 ? leftStructuralLines.at(-1) : undefined
+  const verticalDividerRatio = (x: number, top: number, bottom: number) => {
+    let filled = 0
+    let total = 0
+    for (let y = top + 3; y < bottom - 3; y += 1) {
+      let linePixel = false
+      for (let scanX = Math.max(0, x - 1); scanX <= Math.min(source.width - 1, x + 1); scanX += 1) {
+        if (dark(scanX, y)) linePixel = true
+      }
+      filled += linePixel ? 1 : 0
+      total += 1
+    }
+    return total ? filled / total : 0
+  }
+
   const periodRows = majorLines.slice(1, -1)
     .map((top, index) => ({ top, bottom: majorLines[index + 2] }))
-    .filter((row) => row.top >= headerBottom && row.bottom - row.top >= 20 && fillRatio(row.top, row.bottom) > 0.15)
+    .filter((row) => {
+      if (row.top < headerBottom || row.bottom - row.top < 20) return false
+      const looksLikeCourseRow = fillRatio(row.top, row.bottom) > 0.15
+      const hasPeriodLabel = row.bottom - row.top >= 40 && periodLabelRatio(row.top, row.bottom) > 0.012
+      // 有独立“节次 / 时间”两列时，用两列之间的竖线精准排除大课间、眼保健操和午休横条。
+      if (periodDivider !== undefined) return verticalDividerRatio(periodDivider, row.top, row.bottom) > 0.55
+      return looksLikeCourseRow || hasPeriodLabel
+    })
     .slice(0, 8)
   if (periodRows.length < 3) return null
 
   const slots: Slot[] = []
   const rawLines: string[] = []
+  const recognizedCells = new Map<string, { course: string; raw: string }>()
   const totalCells = periodRows.length * 5
   let completed = 0
+  let activePageSegmentation = '7'
+
+  const hasCellDivider = (left: number, right: number, y: number) => {
+    let darkCount = 0
+    let total = 0
+    for (let scanY = Math.max(0, y - 1); scanY <= Math.min(source.height - 1, y + 1); scanY += 1) {
+      for (let x = left + 8; x < right - 8; x += 2) {
+        darkCount += dark(x, scanY) ? 1 : 0
+        total += 1
+      }
+    }
+    return total > 0 && darkCount / total > 0.18
+  }
+
   for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
     const row = periodRows[rowIndex]
     const rowHeight = row.bottom - row.top
-    const textHeight = rowHeight < 40 ? rowHeight - 6 : Math.floor(rowHeight * 0.58)
     for (let column = 0; column < 5; column += 1) {
-      const blob = await createEnhancedCell(
-        source,
-        dayBounds[column] + 3,
-        row.top + 3,
-        dayBounds[column + 1] - 3,
-        Math.min(row.bottom - 3, row.top + 3 + textHeight),
-      )
-      const result = await worker.recognize(blob, {}, { text: true })
-      let raw = String(result.data?.text ?? '').replace(/\s+/g, '')
-      let course = matchCourseName(raw)
-      if (!course) {
-        const retryBlob = await createEnhancedCell(
-          source,
-          dayBounds[column] + 3,
-          row.top + 3,
-          dayBounds[column + 1] - 3,
-          Math.min(row.bottom - 3, row.top + 3 + textHeight),
-          140,
-        )
-        const retryResult = await worker.recognize(retryBlob, {}, { text: true })
-        const retryRaw = String(retryResult.data?.text ?? '').replace(/\s+/g, '')
-        course = matchCourseName(retryRaw)
-        raw = [raw, retryRaw].filter(Boolean).join(' / ')
+      const left = dayBounds[column] + 3
+      const right = dayBounds[column + 1] - 3
+      const top = row.top + 3
+      const bottom = row.bottom - 3
+      const courseLineBottom = Math.min(bottom, top + Math.max(18, Math.floor(rowHeight * 0.55)))
+      const textBottom = Math.min(bottom, top + Math.max(20, Math.floor(rowHeight * 0.72)))
+      const variants: Array<{ bottom: number; threshold?: number; originalScale?: number; pageSegmentation?: string }> = [
+        // 居中的短课名在上半格裁剪中会被截断，先读完整单元格。
+        { bottom },
+        { bottom, threshold: 140 },
+        { bottom, originalScale: 1 },
+        { bottom, originalScale: 1, pageSegmentation: '7' },
+        { bottom: textBottom },
+        { bottom: courseLineBottom },
+      ]
+      const rawValues: string[] = []
+      let course = ''
+      let bestCourse = { name: '', evidence: 0 }
+      for (const variant of variants) {
+        // 课程标题上半行用 SINGLE_LINE；完整单元格（课程名 + 教师/说明）改用 SINGLE_BLOCK，
+        // 避免“数学”这类短标题被第二行文字或边框干扰后直接返回空结果。
+        const pageSegmentation = variant.pageSegmentation ?? (variant.bottom === bottom ? '6' : '7')
+        if (pageSegmentation !== activePageSegmentation) {
+          await worker.setParameters({ tessedit_pageseg_mode: pageSegmentation })
+          activePageSegmentation = pageSegmentation
+        }
+        const blob = variant.originalScale
+          ? await createOriginalCell(source, left, top, right, variant.bottom, variant.originalScale)
+          : await createEnhancedCell(source, left, top, right, variant.bottom, variant.threshold)
+        const result = await worker.recognize(blob, {}, { text: true })
+        const rawValue = String(result.data?.text ?? '').replace(/\s+/g, '')
+        if (rawValue) rawValues.push(rawValue)
+        const candidate = matchGridCourse(rawValue)
+        bestCourse = preferCourse(rawValue, candidate, bestCourse)
+        course = bestCourse.name
+        // 长课程名通常只能在完整单元格裁剪中识别出来，拿到完整标题后不再用短候选覆盖它。
+        if (candidate === '基本托管A：校内选修课') {
+          course = candidate
+          break
+        }
       }
+
+      // 第 7 节一格内会再用竖线分成左右两个课程，例如“延时服务｜素质拓展”。
+      // 整格 OCR 往往只读到左半边，因此检测内部竖线后分别识别两半并合并结果。
+      const cellWidth = right - left
+      // 内部分隔线很短且可能因压缩断开，按当前行检测，不依赖全图长竖线候选。
+      const internalPixels: number[] = []
+      for (let x = Math.ceil(left + cellWidth * 0.3); x < right - cellWidth * 0.3; x += 1) {
+        if (verticalDividerRatio(x, row.top, row.bottom) > 0.75) internalPixels.push(x)
+      }
+      const internalDivider = groupLinePositions(internalPixels)
+        .sort((a, b) => Math.abs(a - (left + right) / 2) - Math.abs(b - (left + right) / 2))[0]
+      if (internalDivider !== undefined) {
+        if (activePageSegmentation !== '6') {
+          await worker.setParameters({ tessedit_pageseg_mode: '6' })
+          activePageSegmentation = '6'
+        }
+        const splitCourses: string[] = []
+        for (const [splitLeft, splitRight] of [[left, internalDivider - 2], [internalDivider + 2, right]]) {
+          let splitBest = { name: '', evidence: 0 }
+          for (const variant of [{ originalScale: 1 }, { originalScale: 2 }, {}, { threshold: 140 }]) {
+            const splitBlob = variant.originalScale
+              ? await createOriginalCell(source, splitLeft, top, splitRight, bottom, variant.originalScale)
+              : await createEnhancedCell(source, splitLeft, top, splitRight, bottom, variant.threshold)
+            const splitResult = await worker.recognize(splitBlob, {}, { text: true })
+            const splitRaw = String(splitResult.data?.text ?? '').replace(/\s+/g, '')
+            if (splitRaw) rawValues.push(splitRaw)
+            const candidate = matchGridCourse(splitRaw)
+            splitBest = preferCourse(splitRaw, candidate, splitBest)
+          }
+          const splitCourse = splitBest.name
+          if (splitCourse) splitCourses.push(splitCourse)
+        }
+        const uniqueSplitCourses = Array.from(new Set(splitCourses))
+        if (uniqueSplitCourses.length >= 2) course = uniqueSplitCourses.join(' / ')
+        else if (uniqueSplitCourses.length === 1) {
+          const splitCourse = uniqueSplitCourses[0]
+          if (!course) course = splitCourse
+          else if (!course.includes(splitCourse)) course = `${course} / ${splitCourse}`
+        }
+      }
+      const raw = Array.from(new Set(rawValues)).join(' / ')
+      const cellKey = `${column + 1}-${rowIndex + 1}`
       if (course) {
-        slots.push({ id: uid(), day: column + 1, period: rowIndex + 1, name: course })
+        recognizedCells.set(cellKey, { course, raw })
         rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw} → ${course}`)
       } else if (raw) rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw}（未采用）`)
       completed += 1
       onProgress(12 + Math.round((completed / totalCells) * 82), `正在逐格读取课程（${completed}/${totalCells}）…`)
     }
+  }
+
+  // 课程表会使用纵向合并单元格（本图周一第 6、7 节的“身心成长”）。
+  // 只有当相邻两行之间在该列确实没有横线时才向下延展，避免把普通空课误填成上一节课程。
+  for (let rowIndex = 1; rowIndex < periodRows.length; rowIndex += 1) {
+    for (let column = 0; column < 5; column += 1) {
+      const currentKey = `${column + 1}-${rowIndex + 1}`
+      if (recognizedCells.has(currentKey)) continue
+      const previousKey = `${column + 1}-${rowIndex}`
+      const previous = recognizedCells.get(previousKey)
+      const boundary = periodRows[rowIndex].top
+      if (!previous || hasCellDivider(dayBounds[column], dayBounds[column + 1], boundary)) continue
+      recognizedCells.set(currentKey, { course: previous.course, raw: `${previous.raw}（合并单元格）` })
+      rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${previous.course}（合并单元格） → ${previous.course}`)
+    }
+  }
+
+  for (const [key, value] of recognizedCells) {
+    const [day, period] = key.split('-').map(Number)
+    slots.push({ id: uid(), day, period, name: value.course })
   }
   return {
     slots,
@@ -389,17 +675,20 @@ function inferSlotsFromOcr(data: any): { slots: Slot[]; candidates: string[]; ra
     for (const period of PERIODS) periodCenters[period] = headerBottom + contentHeight * ((period - 0.5) / 8)
   }
 
-  const noisePattern = /课程|课表|节次|时间|午休|早读|班级|姓名|上午|下午|教师|教室|星期|礼拜|周次/
+  const noisePattern = /课程|课表|节次|时间|午休|早读|班级|姓名|上午|下午|教师|教室|星期|礼拜|周次|眼保健操|大课间|自由阅读|自律/
   const content = words.filter((word) => {
     const name = normalizeCourseName(word.text).replace(/[^\p{L}\p{N}]/gu, '')
     return (
       word.y > headerBottom &&
       word.x > firstDayX - dayStep * 0.55 &&
       name.length >= 1 &&
-      word.confidence >= 15 &&
+      word.confidence >= 5 &&
       !noisePattern.test(name) &&
       !/^(?:第)?\d+(?:节|课)?$/.test(name) &&
-      !/^[-—_=+]+$/.test(name)
+      !/^[-—_=+]+$/.test(name) &&
+      // 仅过滤纯小写字母噪声（smmm/ay），保留「基本托管A」中的大写 A
+      !/^[a-z|｜]+$/.test(name) &&
+      !/^[A-Z]{2,}$/.test(name)
     )
   })
 
@@ -413,13 +702,12 @@ function inferSlotsFromOcr(data: any): { slots: Slot[]; candidates: string[]; ra
 
   const slots = Array.from(grouped.entries()).map(([key, cellWords]) => {
     const [day, period] = key.split('-').map(Number)
-    const combined = normalizeCourseName(
+    const combined = stripNoiseChars(normalizeCourseName(
       Array.from(new Set(cellWords.sort((a, b) => a.x - b.x).map((word) => word.text))).join(''),
-    ).replace(/[^\p{L}\p{N}]/gu, '')
-    const knownCourse = COURSE_NAMES.find((course) => combined.includes(course))
-    const name = knownCourse ?? combined.replace(/(?:老师|教师|教室|校区).*$/, '').slice(0, 18)
+    ).replace(/[^\p{L}\p{N}]/gu, ''))
+    const name = matchGridCourse(combined) || combined.replace(/(?:老师|教师|教室|校区).*$/, '').slice(0, 18)
     return { id: uid(), day, period, name }
-  }).filter((slot) => slot.name.length >= 2 && !noisePattern.test(slot.name))
+  }).filter((slot) => (slot.name.length >= 2 || slot.name === '康') && !noisePattern.test(slot.name))
 
   return {
     slots,
@@ -458,17 +746,25 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     if (!file) return
     setStep('reading')
     setError('')
+    setProgress(0)
+    setStatus('正在准备识别…')
     let worker: any = null
     let cellRecognition = false
     try {
       const { createWorker, OEM, PSM } = await import('tesseract.js')
-      worker = await createWorker('chi_sim', OEM.LSTM_ONLY, {
+      worker = await new Promise((resolve, reject) => createWorker('chi_sim', OEM.LSTM_ONLY, {
+        workerPath: '/ocr/tesseract-7.0.0/worker.min.js',
+        corePath: '/ocr/tesseract-7.0.0',
+        langPath: '/ocr/tesseract-7.0.0',
+        workerBlobURL: false,
+        // 初始化语言包失败也要进入页面的错误提示，避免库抛出未处理错误或一直等待。
+        errorHandler: reject,
         logger: (message: any) => {
           if (!cellRecognition && typeof message.progress === 'number') setProgress(Math.round(message.progress * 100))
           if (!cellRecognition && message.status === 'recognizing text') setStatus('正在读取课程名称…')
           else if (message.status === 'loading language traineddata') setStatus('首次使用，正在加载中文识别包…')
         },
-      })
+      }).then(resolve, reject))
       await worker.setParameters({
         tessedit_pageseg_mode: PSM.SINGLE_LINE,
         user_defined_dpi: '300',
@@ -479,7 +775,10 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         setStatus(nextStatus)
       })
       let inferred: { slots: Slot[]; candidates: string[]; rawText: string }
-      if (gridResult && gridResult.slots.length >= 8) {
+      // 只要网格定位成功且至少读到一格，就保留逐格结果。
+      // 低于 8 格并不代表网格失败：空课、合并格和低对比度单元格都可能让数量暂时偏少；
+      // 直接退回整张图 OCR 会丢失列/节次关系，反而更容易出现整列错位。
+      if (gridResult && gridResult.slots.length > 0) {
         inferred = gridResult
       } else {
         cellRecognition = false
@@ -500,7 +799,9 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     } catch (reason) {
       console.error(reason)
       setStep('pick')
-      setError('识别没有成功。你可以换一张更清晰、拍正的图片重试，或直接填写课程。')
+      setError(worker
+        ? '识别没有成功。你可以换一张更清晰、拍正的图片重试，或直接填写课程。'
+        : '识别程序加载失败，请刷新页面后重试。')
     } finally {
       if (worker) await worker.terminate().catch(() => undefined)
     }
@@ -518,6 +819,9 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     setOcrText('语文 数学 英语 科学 体育 音乐 美术 班会（示例数据）')
     setStep('review')
   }
+  const readingStatusMatch = /^正在逐格读取课程（(\d+\/\d+)）/.exec(status)
+  const readingStatusLabel = readingStatusMatch ? '正在逐格读取课程' : status
+  const readingStatusCount = readingStatusMatch?.[1]
 
   return (
     <div className="sheet-backdrop" role="dialog" aria-modal="true">
@@ -525,31 +829,41 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         <div className="sheet-handle" />
         <div className="sheet-header">
           {step !== 'pick' ? <button className="icon-button" onClick={() => setStep('pick')}><ChevronLeft size={21} /></button> : <div />}
-          <div><p className="eyebrow">IMPORT</p><h2>{step === 'review' ? '校对课程表' : '上传课程表'}</h2></div>
+          <div className="sheet-heading"><h2>{step === 'review' ? '校对课程表' : '上传课程表'}</h2>{step === 'pick' && <p className="sheet-subtitle">拍下课程表，闪闪来帮你整理呀</p>}</div>
           <button className="icon-button" onClick={onClose}><X size={21} /></button>
         </div>
         {step === 'pick' && (
           <div className="sheet-body">
             <button className={preview ? 'upload-zone has-image' : 'upload-zone'} onClick={() => inputRef.current?.click()}>
-              {preview ? <img src={preview} alt="课程表预览" /> : <><span><ImagePlus size={29} /></span><h3>选择课程表图片</h3><p>建议使用正面截图或清晰照片</p></>}
+              {preview ? <img src={preview} alt="课程表预览" /> : <><span><ImagePlus size={29} /></span><h3>点击选择课程表</h3><p>支持课程表截图或清晰照片</p></>}
             </button>
             <input ref={inputRef} className="visually-hidden" type="file" accept="image/*" onChange={(event) => chooseFile(event.target.files?.[0])} />
             {error && <p className="error-message">{error}</p>}
             <div className="tip-list"><p><Check size={16} />尽量裁掉课程表外的其他内容</p><p><Check size={16} />光线均匀，文字越清楚越好</p><p><Check size={16} />识别后还可以逐项修改</p></div>
-            <button className="primary-button wide" disabled={!file} onClick={recognize}><Sparkles size={18} />开始识别</button>
+            <button className="primary-button wide" onClick={() => { if (file) void recognize(); else inputRef.current?.click() }}><Sparkles size={18} />{file ? '开始识别' : '从相册选择'}</button>
             <button className="text-button" onClick={useDemo}>暂时没有图片？试用示例课程表</button>
           </div>
         )}
         {step === 'reading' && (
-          <div className="reading-state"><div className="scan-preview">{preview && <img src={preview} alt="正在识别的课程表" />}<span /></div><LoaderCircle className="spin" size={27} /><h3>{status}</h3><p>整个过程通常需要 10～30 秒</p><div className="progress"><span style={{ width: `${Math.max(6, progress)}%` }} /></div><strong>{progress}%</strong></div>
+          <div className="reading-state">
+            <div className="scan-preview">{preview && <img src={preview} alt="正在识别的课程表" />}<span /></div>
+            <LoaderCircle className="spin" size={27} aria-hidden="true" />
+            <div className="reading-status-line">
+              <h3>{readingStatusLabel}</h3>
+              {readingStatusCount && <span className="reading-progress-badge">{readingStatusCount}</span>}
+            </div>
+            <p>✨ 整个过程通常需要 10～30 秒</p>
+            <div className="progress"><span style={{ width: `${Math.max(6, progress)}%` }} /></div>
+            <strong>{progress}%</strong>
+          </div>
         )}
         {step === 'review' && (
           <div className="sheet-body review-body">
             <div className={draft.length ? 'review-note' : 'review-note needs-help'}>
               <ListChecks size={18} />
               <p>
-                <strong>{draft.length ? `已自动排入 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong><br />
-                {draft.length ? '请按星期检查，空白或错误的课程可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}
+                <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
+                <span>{draft.length ? '请按星期检查，点错的地方可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
               </p>
             </div>
             <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
@@ -557,7 +871,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
               const slot = draft.find((item) => item.day === day && item.period === period)
               return <label className="period-row" key={`${day}-${period}`}><span>{period}</span><input value={slot?.name ?? ''} onChange={(event) => updateDraft(period, event.target.value)} placeholder="无课程" /></label>
             })}</div>
-            {candidates.length > 0 && <div className="candidate-box"><p>识别到的课程 · 点击添加到{DAY_NAMES[day]}</p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
+            {candidates.length > 0 && <div className="candidate-box"><p><strong>快速补充课程</strong><span>点击添加到{DAY_NAMES[day]}</span></p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
             <details className="ocr-details">
               <summary>查看识别原文（{ocrText.length} 个字）</summary>
               <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
