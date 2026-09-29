@@ -3,6 +3,8 @@ dist/
 .vinext/
 .next/
 .wrangler/
+.vercel/
+.output/
 *.log
 *.tsbuildinfo
 vite.config.js

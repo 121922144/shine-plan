@@ -1,0 +1,12 @@
+{
+  "name": "闪闪计划 SHINE PLAN",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+  "postCreateCommand": "npm ci && npm run db:local:migrate",
+  "forwardPorts": [5190],
+  "portsAttributes": {
+    "5190": {
+      "label": "闪闪计划开发预览",
+      "onAutoForward": "notify"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import { sites } from '@openai/sites-vite-plugin'
 import vinext from 'vinext'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type PluginOption } from 'vite'
 import hostingConfig from './.openai/hosting.json'
 
 const PLACEHOLDER_DATABASE_ID = '00000000-0000-4000-8000-000000000000'
@@ -12,8 +12,16 @@ export default defineConfig(async ({ command, mode }) => {
   process.env.WRANGLER_LOG_PATH ??= '.wrangler/logs'
   process.env.MINIFLARE_REGISTRY_PATH ??= '.wrangler/registry'
 
-  const plugins = [vinext(), sites()]
-  const useCloudflareRuntime = command === 'build' || mode === 'cloudflare'
+  const isVercelBuild = mode === 'vercel'
+  const plugins: PluginOption[] = [vinext()]
+  if (isVercelBuild) {
+    const { nitro } = await import('nitro/vite')
+    plugins.push(...nitro({ preset: 'vercel' }))
+  } else {
+    plugins.push(sites())
+  }
+
+  const useCloudflareRuntime = !isVercelBuild && (command === 'build' || mode === 'cloudflare')
   if (useCloudflareRuntime) {
     const { cloudflare } = await import('@cloudflare/vite-plugin')
     plugins.push(cloudflare({

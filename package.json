@@ -3,12 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "dev": "vinext dev --host 0.0.0.0 --port 5190",
-    "dev:cloudflare": "vinext dev --mode cloudflare --host 0.0.0.0 --port 5190",
+    "dev": "vinext dev --hostname 0.0.0.0 --port 5190",
+    "dev:cloudflare": "vite dev --mode cloudflare --host 0.0.0.0 --port 5190",
     "build": "vinext build",
+    "build:vercel": "vite build --mode vercel",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "db:generate": "drizzle-kit generate",
+    "db:local:migrate": "node scripts/apply-local-migrations.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -32,6 +37,7 @@
     "@vitejs/plugin-react": "6.1.1",
     "@vitejs/plugin-rsc": "^0.5.26",
     "drizzle-kit": "^0.31.10",
+    "nitro": "^3.0.260903-beta",
     "typescript": "^5.9.3",
     "vite": "^8.0.13",
     "wrangler": "^4.92.0"

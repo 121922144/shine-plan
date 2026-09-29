@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import criticalStyles from '../src/styles.css?inline'
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_ORIGIN || 'http://localhost:5190'),
+  metadataBase: new URL(process.env.SITE_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:5190')),
   title: '闪闪计划',
   description: '快速查看今天和明天的课程，记录按日期准备的临时物品。',
   manifest: '/manifest.webmanifest',
