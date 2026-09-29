@@ -3734,6 +3734,20 @@ input:focus-visible {
   text-overflow: ellipsis;
 }
 
+.schedule-course-copy h3 {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: #244c78;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schedule-course-copy input::placeholder {
   color: #9cabb6;
   font-weight: 500;
@@ -4024,6 +4038,10 @@ input:focus-visible {
   }
 
   .schedule-course-copy input {
+    font-size: 15px;
+  }
+
+  .schedule-course-copy h3 {
     font-size: 15px;
   }
 
