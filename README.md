@@ -36,7 +36,7 @@ Vercel 使用独立的 Nitro 构建路径；不会改变本地开发或现有 Si
 
 连接 GitHub 后，`main` 的提交用于 Production，其他分支及 PR 用于 Preview。项目只有 `/` 页面；课表和设置在首页内切换，没有需要额外 SPA rewrite 的二级页面。静态资源使用根路径，例如 `/manifest.webmanifest`。Vercel 的 `VERCEL_URL` 用于未设置 `SITE_ORIGIN` 时的页面元数据地址。
 
-**数据接口尚不能直接在 Vercel 运行：**当前 `/api/*` 依赖 Cloudflare D1 绑定，Vercel 不提供该绑定。完成后端连接和隔离前，不应把 Vercel 构建成功视为完整功能已部署。现有 Sites 站点与 GitHub、Vercel 是独立部署流程。
+**Vercel 不连接现有 Sites 数据：**当前 `/api/*` 的默认实现依赖 Cloudflare D1 绑定，Vercel 不提供该绑定。Vercel Preview/Production 应分别配置 `VITE_API_BASE_URL`，指向一套新建且独立的 API 后端；不要填现有 Sites 地址。未配置时页面仍可打开，并使用浏览器本地数据，但不会进行跨设备同步或后台提醒。
 
 ### 环境变量
 
@@ -46,5 +46,7 @@ Vercel 使用独立的 Nitro 构建路径；不会改变本地开发或现有 Si
 | --- | --- |
 | 本地开发 | 使用默认地址；运行 `db:local:migrate` 后可在 `dev:cloudflare` 下测试本地 D1。按需在被忽略的 `.env.local` 设置提醒密钥。 |
 | Codespaces | 自动安装依赖并初始化独立本地 D1；密钥使用 Codespaces secrets，不能放进仓库。 |
-| Vercel Preview | 使用 Vercel 的 Preview 环境变量和自动生成的 `VERCEL_URL`；API 后端需与正式数据的隔离策略确认后配置。 |
-| Vercel Production | 使用 Vercel 的 Production 环境变量和自动生成的 `VERCEL_URL`；API 后端需在部署前确认。 |
+| Vercel Preview | 在 Preview 环境设置独立后端的 `VITE_API_BASE_URL`；不要填现有 Sites 地址。 |
+| Vercel Production | 在 Production 环境设置独立后端的 `VITE_API_BASE_URL`；不要填现有 Sites 地址。 |
+
+`VITE_API_BASE_URL` 是公开的 API 地址，会随前端代码发送到浏览器；数据库密码、VAPID 私钥和派发密钥不能放入 `VITE_` 变量。Preview 和 Production 可以指向同一套“新建数据库”，但不会接触现有 Sites 数据；如果需要环境隔离，可分别建立两套新数据库。

@@ -21,6 +21,7 @@ type CloudState = { hasState: boolean; slots: Slot[]; notes: DateNote[]; reminde
 const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder' }
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 function readStored<T>(key: string, fallback: T): T {
@@ -36,7 +37,7 @@ async function apiRequest<T>(path: string, token = '', init: RequestInit = {}): 
   const headers = new Headers(init.headers)
   if (token) headers.set('authorization', `Bearer ${token}`)
   if (init.body) headers.set('content-type', 'application/json')
-  const response = await fetch(path, { ...init, headers })
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
   const data = await response.json().catch(() => ({})) as T & { error?: string }
   if (!response.ok) throw new Error(data.error || '云端服务暂时不可用')
   return data
