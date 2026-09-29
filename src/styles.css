@@ -1,4 +1,5 @@
 :root {
+  --app-page-bg: #fffdf8;
   --primary: #6547f5;
   --primary-deep: #4431d8;
   --blue: #3e72f6;
@@ -13,7 +14,7 @@
   --coral: #ff6b70;
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
   color: var(--ink);
-  background: #e9ecfb;
+  background: var(--app-page-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -33,7 +34,7 @@ body,
 
 body {
   min-width: 320px;
-  background: #e9ecfb;
+  background: var(--app-page-bg);
 }
 
 button,
@@ -63,6 +64,7 @@ input:focus-visible {
   place-items: center;
   padding: 18px;
   overflow: hidden;
+  background: var(--app-page-bg);
 }
 
 .phone-frame {
@@ -72,7 +74,7 @@ input:focus-visible {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--paper);
+  background: var(--app-page-bg);
   border: 1px solid rgba(112, 119, 172, .14);
   border-radius: 34px;
   box-shadow: 0 24px 80px rgba(43, 52, 109, .18);
@@ -86,6 +88,7 @@ input:focus-visible {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  background: var(--app-page-bg);
 }
 
 .page-content::-webkit-scrollbar {
@@ -96,7 +99,7 @@ input:focus-visible {
 .schedule-page,
 .settings-page {
   min-height: 100%;
-  background: var(--paper);
+  background: var(--app-page-bg);
 }
 
 /* Shared brand and hero decoration */
@@ -774,10 +777,6 @@ input:focus-visible {
 }
 
 /* Schedule */
-.schedule-page {
-  background: radial-gradient(circle at 20% 2%, #f9fbff 0, #f3f5ff 44%, #eff2ff 100%);
-}
-
 .schedule-hero {
   position: relative;
   min-height: 280px;
@@ -1050,7 +1049,6 @@ input:focus-visible {
   --muted: #8192ab;
   --line: #ecf0f2;
   padding: 14px 14px 28px;
-  background: #fffdf7;
 }
 
 .settings-content {
@@ -2200,13 +2198,8 @@ input:focus-visible {
   }
 }
 
-/* SHINE PLAN — scoped to the home surface; schedule, settings and import retain their theme. */
-.shine-home-active {
-  background: #faf9f4;
-}
-
+/* SHINE PLAN home surface. */
 .shine-home-active .phone-frame {
-  background: #fffdf8;
   border-color: #ede8df;
   box-shadow: 0 18px 60px rgba(95, 79, 53, .12);
 }
@@ -2217,9 +2210,9 @@ input:focus-visible {
   --primary-deep: #005dd4;
   --ink: #083591;
   --muted: #747db9;
-  --paper: #fffdf8;
+  --paper: var(--app-page-bg);
   --line: #e1effa;
-  background: var(--paper);
+  background: var(--app-page-bg);
   color: var(--ink);
 }
 
@@ -2915,33 +2908,36 @@ input:focus-visible {
   gap: 3px;
   color: #8a97a9;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .shine-home-active .nav-button svg {
-  width: 27px;
-  height: 27px;
-  stroke-width: 2;
+  width: 23px;
+  height: 23px;
+  stroke-width: 1.85;
 }
 
 .shine-home-active .nav-button.active {
-  color: #188fda;
-  font-weight: 650;
+  color: #1598d5;
+  font-weight: 700;
 }
 
 .shine-home-active .nav-button.active svg {
-  fill: #188fda12;
-  stroke-width: 2.2;
+  fill: none;
+  stroke-width: 1.85;
 }
 
 .shine-home-active .nav-button.active::after {
-  display: none;
+  display: block;
+  bottom: -4px;
+  height: 3px;
+  background: #4bb6e8;
 }
 
 .shine-home-active .nav-button:focus-visible {
-  outline: 2px solid #008cff;
-  outline-offset: -2px;
-  background: #eff9ff;
+  outline: none;
+  border-radius: 14px;
+  background: #f6f4ff;
 }
 
 .shine-home button:focus-visible {
@@ -3434,7 +3430,6 @@ input:focus-visible {
 .schedule-page {
   min-height: 100%;
   padding: 14px 14px 34px;
-  background: linear-gradient(180deg, #fffefa 0%, #fbfdfb 54%, #f8fcff 100%);
 }
 
 .schedule-banner {
@@ -3452,7 +3447,7 @@ input:focus-visible {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(247, 253, 255, .68) 0%, rgba(244, 252, 255, .6) 34%, transparent 61%), linear-gradient(0deg, rgba(245, 251, 248, .18), transparent 38%);
+  background: linear-gradient(90deg, rgba(247, 253, 255, .18) 0%, rgba(244, 252, 255, .36) 34%, transparent 61%), linear-gradient(0deg, rgba(245, 251, 248, .18), transparent 38%);
   pointer-events: none;
 }
 
@@ -4049,12 +4044,7 @@ input:focus-visible {
 }
 
 /* Settings keeps the shared navigation, with the same light blue treatment as the timetable. */
-.app-shell:has(.settings-page) {
-  background: #faf9f4;
-}
-
 .app-shell:has(.settings-page) .phone-frame {
-  background: #fffdf7;
   border-color: #ede8df;
 }
 
