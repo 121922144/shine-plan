@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     shortcut: '/shine-icon-64x64.png',
     apple: [{ url: '/shine-apple-touch-icon-180x180.png', sizes: '180x180', type: 'image/png' }],
   },
-  appleWebApp: { capable: true, title: '闪闪计划', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: '闪闪计划', statusBarStyle: 'black-translucent' },
   openGraph: {
     title: '闪闪计划',
     description: '打开就知道，今天明天上什么课。',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#f6f3ec',
+  themeColor: '#f2faff',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
