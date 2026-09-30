@@ -1049,6 +1049,7 @@ input:focus-visible {
   --muted: #8192ab;
   --line: #ecf0f2;
   padding: 14px 14px 28px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .settings-content {
@@ -3430,6 +3431,7 @@ input:focus-visible {
 .schedule-page {
   min-height: 100%;
   padding: 14px 14px 34px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .schedule-banner {
