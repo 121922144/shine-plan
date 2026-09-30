@@ -2220,8 +2220,8 @@ input:focus-visible {
   position: relative;
   display: grid;
   isolation: isolate;
-  min-height: calc(280px + env(safe-area-inset-top));
-  background: linear-gradient(135deg, #f2faff, #b5e2ff 65%, #a0d8ff);
+  min-height: 280px;
+  background: linear-gradient(180deg, #f6f3ec 0%, #eef7ff 12%, #b5e2ff 65%, #a0d8ff 100%);
 }
 
 .shine-hero-art {
@@ -2250,7 +2250,7 @@ input:focus-visible {
   grid-area: 1 / 1;
   z-index: 2;
   min-width: 0;
-  padding: calc(24px + env(safe-area-inset-top)) 30px 54px;
+  padding: 24px 30px 54px;
 }
 
 .shine-hero-topline {
