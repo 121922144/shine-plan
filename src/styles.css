@@ -1049,6 +1049,7 @@ input:focus-visible {
   --muted: #8192ab;
   --line: #ecf0f2;
   padding: 14px 14px 28px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .settings-content {
@@ -2221,7 +2222,7 @@ input:focus-visible {
   display: grid;
   isolation: isolate;
   min-height: 280px;
-  background: linear-gradient(135deg, #f2faff, #b5e2ff 65%, #a0d8ff);
+  background: linear-gradient(180deg, #f6f3ec 0%, #eef7ff 12%, #b5e2ff 65%, #a0d8ff 100%);
 }
 
 .shine-hero-art {
@@ -3430,6 +3431,7 @@ input:focus-visible {
 .schedule-page {
   min-height: 100%;
   padding: 14px 14px 34px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .schedule-banner {
@@ -3734,6 +3736,20 @@ input:focus-visible {
   text-overflow: ellipsis;
 }
 
+.schedule-course-copy h3 {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: #244c78;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schedule-course-copy input::placeholder {
   color: #9cabb6;
   font-weight: 500;
@@ -4024,6 +4040,10 @@ input:focus-visible {
   }
 
   .schedule-course-copy input {
+    font-size: 15px;
+  }
+
+  .schedule-course-copy h3 {
     font-size: 15px;
   }
 

@@ -114,7 +114,7 @@ function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
             <span className="shine-course-empty-privacy"><Sparkles size={13} />图片只在你的设备上识别，不会上传保存</span>
           </article>
         )) : (
-          <><ul className="shine-course-list">{slots.map((slot, index) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={mockCourseStatuses[index % mockCourseStatuses.length]} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>固定作息时间 · 状态为示例</span></p></>
+          <><ul className="shine-course-list schedule-course-list">{slots.map((slot, index) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={mockCourseStatuses[index % mockCourseStatuses.length]} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>固定作息时间 · 状态为示例</span></p></>
         )}
 
         <StarRewardBanner />
