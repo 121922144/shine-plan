@@ -362,7 +362,20 @@ async function recognizeGridTimetable(
   const verticalLines = groupLinePositions(verticalPixels)
   // 第 7 节会在每个星期格内再分成两格，因此必须允许跳过这些“半列”竖线，
   // 从候选线中挑出六条真正的星期边界。
-  const dayBounds = findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
+  // 部分课表把“节次”列与五个星期列画成完全等宽的 6 列。
+  // 此时会检测到 7 条等距竖线；必须排除最左侧的节次列，
+  // 取最右边的 6 条边界。仅凭“等距评分”无法区分这两组。
+  const isEvenlySpaced = (bounds: number[]) => {
+    if (bounds.length !== 7) return false
+    const gaps = bounds.slice(1).map((line, index) => line - bounds[index])
+    const average = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
+    return average >= source.width * 0.075 &&
+      average <= source.width * 0.23 &&
+      gaps.every((gap) => Math.abs(gap - average) <= average * 0.14)
+  }
+  const dayBounds = isEvenlySpaced(verticalLines)
+    ? verticalLines.slice(1)
+    : findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
   if (!dayBounds) return null
   // 每个星期的最后一条竖线必须是表格右边界。
   // 如果选到节次列 + 周一至周四，周一会全部空白。
@@ -477,6 +490,8 @@ async function recognizeGridTimetable(
   const courseRows = leadingStudyRow ? periodRows.slice(1) : periodRows
   const slots: Slot[] = []
   const rawLines: string[] = []
+  rawLines.push(`网格边界：原始竖线 [${verticalLines.join(', ')}]；星期边界 [${dayBounds.join(', ')}]`)
+  rawLines.push(`识别课程行：${periodRows.length}；跳过早自习：${leadingStudyRow ? '是' : '否'}`)
   if (leadingStudyRow) rawLines.push('检测到早自习行，已跳过，不计入第一节')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
   const totalCells = courseRows.length * 5
