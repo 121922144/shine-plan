@@ -377,19 +377,37 @@ async function recognizeGridTimetable(
     ? verticalLines.slice(1)
     : findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
   if (!dayBounds) return null
-  // 每个星期的最后一条竖线必须是表格右边界。
-  // 如果选到节次列 + 周一至周四，周一会全部空白。
+  // 网格日志确认：旧算法可能选到 [119,251,365,498,630,762]，
+  // 但真实最右边界为 845。以真实右边界为锚点重新定位五个星期，
+  // 不再用未锚定的等距搜索重复选回错误的六条线。
   const rightmostTableLine = verticalLines.at(-1)
   if (rightmostTableLine !== undefined &&
+      rightmostTableLine > source.width * 0.85 &&
       rightmostTableLine - dayBounds[5] > source.width * 0.07) {
-    const corrected = findEvenlySpacedBounds(
-      verticalLines.filter((line) => line >= dayBounds[0] && line <= rightmostTableLine),
-      6,
-      source.width,
-      0.25,
-    )
-    if (corrected && Math.abs(corrected[5] - rightmostTableLine) < source.width * 0.025) {
-      dayBounds.splice(0, dayBounds.length, ...corrected)
+    let bestRightAnchored: { bounds: number[]; score: number } | null = null
+    for (const left of verticalLines) {
+      const span = rightmostTableLine - left
+      const step = span / 5
+      if (step < source.width * 0.085 || step > source.width * 0.19) continue
+      const bounds = [left]
+      let previous = left
+      let score = 0
+      for (let index = 1; index < 5; index += 1) {
+        const expected = left + index * step
+        const candidates = verticalLines.filter((x) => x > previous + step * 0.55 && x < rightmostTableLine)
+        const nearest = candidates.sort((a, b) => Math.abs(a - expected) - Math.abs(b - expected))[0]
+        if (nearest === undefined) break
+        bounds.push(nearest)
+        score += Math.abs(nearest - expected) / step
+        previous = nearest
+      }
+      if (bounds.length !== 5) continue
+      bounds.push(rightmostTableLine)
+      score /= 6
+      if (!bestRightAnchored || score < bestRightAnchored.score) bestRightAnchored = { bounds, score }
+    }
+    if (bestRightAnchored && bestRightAnchored.score < 0.2) {
+      dayBounds.splice(0, dayBounds.length, ...bestRightAnchored.bounds)
     }
   }
 
