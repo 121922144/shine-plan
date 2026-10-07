@@ -139,16 +139,22 @@ function parseSpecialPeriodLabel(value: string) {
   const candidates = ['早自习', '早读', '午休', '午餐午休', '晚自习']
   const exact = candidates.find((candidate) => clean.includes(candidate))
   if (exact) return exact
-  // 小尺寸课表中的中文 OCR 很容易出现一两个错字，例如“早自习”可能读成“早上E”。
-  // 对短标签允许较宽的编辑距离，但必须保留“早 / 午 / 晚”等关键字。
-  const head = clean[0]
-  if (head !== '早' && head !== '午' && head !== '晚') return null
+
+  // 左侧节次列通常只有 2～5 个汉字。这里不要再强制要求第一个字必须是“早/午/晚”，
+  // 因为实际 OCR 很容易把“早自习”读成“时自习”“早上E”等，但整体形状仍然非常接近。
+  // 只在短标签范围内做模糊匹配，避免把课程名称误判成特殊行。
+  const shortLabel = clean.length <= 6 && (clean.includes('自习') || clean.includes('午休') || clean.includes('早读'))
   const ranked = candidates
-    .filter((candidate) => candidate[0] === head)
     .map((candidate) => ({ candidate, distance: editDistance(clean, candidate) }))
     .sort((a, b) => a.distance - b.distance)
   const best = ranked[0]
-  return best && best.distance <= Math.max(1, Math.ceil(best.candidate.length * 0.5)) ? best.candidate : null
+  if (shortLabel && best && best.distance <= Math.max(1, Math.ceil(best.candidate.length * 0.5))) {
+    return best.candidate
+  }
+
+  // 针对常见中文 OCR 错字做少量显式兜底，例如“时自习”通常就是“早自习”。
+  if (/^(时|早上|早E)自习?$/.test(clean) || /^早上[EI1]$/.test(clean)) return '早自习'
+  return null
 }
 
 function parseExplicitPeriodLabel(value: string) {
@@ -492,6 +498,26 @@ async function recognizeGridTimetable(
 
   // 同时识别“早自习 / 午休 / 晚自习”等非课程行。即使“第 N 节”文字 OCR 失败，
   // 也不能让这些行占用课程编号。
+  // 先用左侧节次列本身的 OCR 结果做一次“整列识别”。整列比逐个小格识别稳定很多，
+  // 例如本课表的“早自习”在小格 OCR 中容易变成“时自习”，但整列 PSM 6 可以稳定读出整行标签。
+  // 这里主要用于补充逐行 OCR，不改变课程格的识别方式。
+  if (activePageSegmentation !== '6') {
+    await worker.setParameters({ tessedit_pageseg_mode: '6' })
+    activePageSegmentation = '6'
+  }
+  const periodColumnBlob = await createOriginalCell(
+    source,
+    8,
+    Math.max(0, headerBottom + 2),
+    Math.max(29, dayBounds[0] - 3),
+    Math.min(source.height, majorLines.at(-1)! - 2),
+    1.5,
+  )
+  const periodColumnResult = await worker.recognize(periodColumnBlob, {}, { text: true })
+  const periodColumnText = String(periodColumnResult.data?.text ?? '')
+  const periodColumnLines = periodColumnText.split(/[\\r\\n]+/).map((line) => line.trim()).filter(Boolean)
+  const rawSpecialColumnLabels = periodColumnLines.join(' / ')
+
   const specialPeriodRows = new Set<number>()
   for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
     const row = periodRows[rowIndex]
@@ -532,6 +558,7 @@ async function recognizeGridTimetable(
 
   const slots: Slot[] = []
   const rawLines: string[] = []
+  if (rawSpecialColumnLabels) rawLines.push(`左侧节次 OCR：${rawSpecialColumnLabels}`)
   const recognizedCells = new Map<string, { course: string; raw: string }>()
   const totalCells = indexedPeriodRows.length * 5
   let completed = 0
@@ -981,4 +1008,3 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     </div>
   )
 }
-
