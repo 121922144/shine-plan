@@ -133,44 +133,6 @@ function findEvenlySpacedBounds(lines: number[], count: number, width: number, m
   return best && best.score < maxScore ? best.lines : null
 }
 
-function parseSpecialPeriodLabel(value: string) {
-  const clean = normalizeCourseName(value).replace(/[^\p{L}\p{N}]/gu, '')
-  if (!clean) return null
-  const candidates = ['早自习', '早读', '午休', '午餐午休', '晚自习']
-  const exact = candidates.find((candidate) => clean.includes(candidate))
-  if (exact) return exact
-
-  // 左侧节次列通常只有 2～5 个汉字。这里不要再强制要求第一个字必须是“早/午/晚”，
-  // 因为实际 OCR 很容易把“早自习”读成“时自习”“早上E”等，但整体形状仍然非常接近。
-  // 只在短标签范围内做模糊匹配，避免把课程名称误判成特殊行。
-  const shortLabel = clean.length <= 6 && (clean.includes('自习') || clean.includes('午休') || clean.includes('早读'))
-  const ranked = candidates
-    .map((candidate) => ({ candidate, distance: editDistance(clean, candidate) }))
-    .sort((a, b) => a.distance - b.distance)
-  const best = ranked[0]
-  if (shortLabel && best && best.distance <= Math.max(1, Math.ceil(best.candidate.length * 0.5))) {
-    return best.candidate
-  }
-
-  // 针对常见中文 OCR 错字做少量显式兜底，例如“时自习”通常就是“早自习”。
-  if (/^(时|早上|早E)自习?$/.test(clean) || /^早上[EI1]$/.test(clean)) return '早自习'
-  return null
-}
-
-function parseExplicitPeriodLabel(value: string) {
-  const clean = value
-    .replace(/[\s\n\r]/g, '')
-    .replace(/[：:、.。|｜]/g, '')
-  const match = clean.match(/第([一二三四五六七八1-8])(?:节|課|课)/)
-    ?? clean.match(/^([一二三四五六七八1-8])(?:节|課|课)$/)
-  if (!match) return null
-  const numberMap: Record<string, number> = {
-    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8,
-  }
-  const period = numberMap[match[1]] ?? Number(match[1])
-  return period >= 1 && period <= 8 ? period : null
-}
-
 function editDistance(left: string, right: string) {
   const row = Array.from({ length: right.length + 1 }, (_, index) => index)
   for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
@@ -471,141 +433,13 @@ async function recognizeGridTimetable(
       if (periodDivider !== undefined) return verticalDividerRatio(periodDivider, row.top, row.bottom) > 0.55
       return looksLikeCourseRow || hasPeriodLabel
     })
+    .slice(0, 8)
   if (periodRows.length < 3) return null
-
-  // 如果左侧明确写了“第 N 节”，节次以标签为准，而不是按格子出现顺序。
-  // 早自习、午休、晚自习等没有“第 N 节”标签的行不会占用课程节次。
-  const explicitPeriodByRow = new Map<number, number>()
-  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
-    const row = periodRows[rowIndex]
-    for (const variant of [
-      { originalScale: 1.5 },
-      { originalScale: 2 },
-      {},
-      { threshold: 140 },
-    ] as Array<{ originalScale?: number; threshold?: number }>) {
-      const blob = variant.originalScale
-        ? await createOriginalCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.originalScale)
-        : await createEnhancedCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.threshold)
-      const result = await worker.recognize(blob, {}, { text: true })
-      const period = parseExplicitPeriodLabel(String(result.data?.text ?? ''))
-      if (period !== null) {
-        explicitPeriodByRow.set(rowIndex, period)
-        break
-      }
-    }
-  }
-
-  // 同时识别“早自习 / 午休 / 晚自习”等非课程行。即使“第 N 节”文字 OCR 失败，
-  // 也不能让这些行占用课程编号。
-  // 先用左侧节次列本身的 OCR 结果做一次“整列识别”。整列比逐个小格识别稳定很多，
-  // 例如本课表的“早自习”在小格 OCR 中容易变成“时自习”，但整列 PSM 6 可以稳定读出整行标签。
-  // 这里主要用于补充逐行 OCR，不改变课程格的识别方式。
-  if (activePageSegmentation !== '6') {
-    await worker.setParameters({ tessedit_pageseg_mode: '6' })
-    activePageSegmentation = '6'
-  }
-  const periodColumnBlob = await createOriginalCell(
-    source,
-    8,
-    Math.max(0, headerBottom + 2),
-    Math.max(29, dayBounds[0] - 3),
-    Math.min(source.height, majorLines.at(-1)! - 2),
-    1.5,
-  )
-  const periodColumnResult = await worker.recognize(periodColumnBlob, {}, { text: true })
-  const periodColumnText = String(periodColumnResult.data?.text ?? '')
-  const periodColumnLines = periodColumnText.split(/[\\r\\n]+/).map((line) => line.trim()).filter(Boolean)
-  const rawSpecialColumnLabels = periodColumnLines.join(' / ')
-
-  // 如果整列 OCR 能稳定输出“一行对应一个表格行”，直接按垂直顺序把标签绑定到行。
-  // 这是比“按识别到的课程格顺序编号”更可靠的兜底：本图会得到
-  // 早自习 / 第一节 / 第二节 / … / 第六节 / 晚自习。
-  if (periodColumnLines.length === periodRows.length) {
-    periodColumnLines.forEach((label, rowIndex) => {
-      const period = parseExplicitPeriodLabel(label)
-      if (period !== null) explicitPeriodByRow.set(rowIndex, period)
-    })
-  }
-
-  const specialPeriodRows = new Set<number>()
-  if (periodColumnLines.length === periodRows.length) {
-    periodColumnLines.forEach((label, rowIndex) => {
-      if (parseSpecialPeriodLabel(label)) specialPeriodRows.add(rowIndex)
-    })
-  }
-  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
-    const row = periodRows[rowIndex]
-    const variants = [
-      { originalScale: 1.5 },
-      { originalScale: 2 },
-      {},
-      { threshold: 140 },
-    ] as Array<{ originalScale?: number; threshold?: number }>
-    for (const variant of variants) {
-      const blob = variant.originalScale
-        ? await createOriginalCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.originalScale)
-        : await createEnhancedCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.threshold)
-      const result = await worker.recognize(blob, {}, { text: true })
-      if (parseSpecialPeriodLabel(String(result.data?.text ?? ''))) {
-        specialPeriodRows.add(rowIndex)
-        break
-      }
-    }
-  }
-
-  // 明确的“第 N 节”标签是节次的权威来源。即使只识别到一两个标签，
-  // 也必须用它们作为锚点；绝不能让“早自习 / 午休”占用第 1、5 节。
-  // 对没有识别出标签的课程行，仅在两个已知锚点之间补齐缺失的连续节次。
-  const labeledRows = Array.from(explicitPeriodByRow.entries())
-    .filter(([rowIndex]) => !specialPeriodRows.has(rowIndex))
-    .sort((a, b) => a[0] - b[0])
-  const mappedPeriods = new Map<number, number>(labeledRows)
-  if (labeledRows.length > 0) {
-    // 锚点前只允许回填正数节次，锚点后只允许补到第八节；
-    // 已知的特殊行永远跳过，避免再发生整体偏移。
-    for (let anchor = 0; anchor < labeledRows.length; anchor += 1) {
-      const [rowIndex, period] = labeledRows[anchor]
-      const next = labeledRows[anchor + 1]
-      const nextRow = next ? next[0] : periodRows.length
-      let expected = period + 1
-      for (let candidateRow = rowIndex + 1; candidateRow < nextRow; candidateRow += 1) {
-        if (specialPeriodRows.has(candidateRow)) continue
-        if (next && expected >= next[1]) break
-        if (expected > 8) break
-        mappedPeriods.set(candidateRow, expected++)
-      }
-    }
-    const [firstRow, firstPeriod] = labeledRows[0]
-    let expected = firstPeriod - 1
-    for (let candidateRow = firstRow - 1; candidateRow >= 0 && expected >= 1; candidateRow -= 1) {
-      if (specialPeriodRows.has(candidateRow)) continue
-      mappedPeriods.set(candidateRow, expected--)
-    }
-  }
-
-  // 没有任何有效节次锚点时，仍排除早自习/午休等特殊行，
-  // 并在原文中明确标记采用了顺序兜底，便于后续诊断。
-  const indexedPeriodRows = labeledRows.length > 0
-    ? periodRows
-      .map((row, rowIndex) => ({ row, rowIndex, period: mappedPeriods.get(rowIndex) }))
-      .filter((item): item is { row: { top: number; bottom: number }; rowIndex: number; period: number } => item.period !== undefined)
-      .filter((item, index, items) => items.findIndex((candidate) => candidate.period === item.period) === index)
-    : periodRows
-      .map((row, rowIndex) => ({ row, rowIndex }))
-      .filter((item) => !specialPeriodRows.has(item.rowIndex))
-      .slice(0, 8)
-      .map((item, index) => ({ ...item, period: index + 1 }))
-
-  if (indexedPeriodRows.length < 3) return null
 
   const slots: Slot[] = []
   const rawLines: string[] = []
-  if (rawSpecialColumnLabels) rawLines.push(`左侧节次 OCR：${rawSpecialColumnLabels}`)
-  rawLines.push(`节次映射：${indexedPeriodRows.map(({ rowIndex, period }) => `行${rowIndex + 1}→第${period}节`).join('、')}`)
-  if (!labeledRows.length) rawLines.push('提示：未识别到明确节次标签，已使用顺序兜底')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
-  const totalCells = indexedPeriodRows.length * 5
+  const totalCells = periodRows.length * 5
   let completed = 0
   let activePageSegmentation = '7'
 
@@ -621,8 +455,8 @@ async function recognizeGridTimetable(
     return total > 0 && darkCount / total > 0.18
   }
 
-  for (let indexedRowIndex = 0; indexedRowIndex < indexedPeriodRows.length; indexedRowIndex += 1) {
-    const { row, rowIndex, period } = indexedPeriodRows[indexedRowIndex]
+  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
+    const row = periodRows[rowIndex]
     const rowHeight = row.bottom - row.top
     for (let column = 0; column < 5; column += 1) {
       const left = dayBounds[column] + 3
@@ -707,11 +541,11 @@ async function recognizeGridTimetable(
         }
       }
       const raw = Array.from(new Set(rawValues)).join(' / ')
-      const cellKey = `${column + 1}-${period}`
+      const cellKey = `${column + 1}-${rowIndex + 1}`
       if (course) {
         recognizedCells.set(cellKey, { course, raw })
-        rawLines.push(`${DAY_NAMES[column + 1]} 第${period}节：${raw} → ${course}`)
-      } else if (raw) rawLines.push(`${DAY_NAMES[column + 1]} 第${period}节：${raw}（未采用）`)
+        rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw} → ${course}`)
+      } else if (raw) rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw}（未采用）`)
       completed += 1
       onProgress(12 + Math.round((completed / totalCells) * 82), `正在逐格读取课程（${completed}/${totalCells}）…`)
     }
@@ -719,20 +553,16 @@ async function recognizeGridTimetable(
 
   // 课程表会使用纵向合并单元格（本图周一第 6、7 节的“身心成长”）。
   // 只有当相邻两行之间在该列确实没有横线时才向下延展，避免把普通空课误填成上一节课程。
-  for (let indexedRowIndex = 1; indexedRowIndex < indexedPeriodRows.length; indexedRowIndex += 1) {
-    const current = indexedPeriodRows[indexedRowIndex]
-    const previousRow = indexedPeriodRows[indexedRowIndex - 1]
-    // 只有真实相邻的节次才允许沿用上一格的课程，避免跨过早自习/午休等非课程行。
-    if (current.period !== previousRow.period + 1) continue
+  for (let rowIndex = 1; rowIndex < periodRows.length; rowIndex += 1) {
     for (let column = 0; column < 5; column += 1) {
-      const currentKey = `${column + 1}-${current.period}`
+      const currentKey = `${column + 1}-${rowIndex + 1}`
       if (recognizedCells.has(currentKey)) continue
-      const previousKey = `${column + 1}-${previousRow.period}`
+      const previousKey = `${column + 1}-${rowIndex}`
       const previous = recognizedCells.get(previousKey)
-      const boundary = current.row.top
+      const boundary = periodRows[rowIndex].top
       if (!previous || hasCellDivider(dayBounds[column], dayBounds[column + 1], boundary)) continue
       recognizedCells.set(currentKey, { course: previous.course, raw: `${previous.raw}（合并单元格）` })
-      rawLines.push(`${DAY_NAMES[column + 1]} 第${current.period}节：${previous.course}（合并单元格） → ${previous.course}`)
+      rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${previous.course}（合并单元格） → ${previous.course}`)
     }
   }
 
@@ -1027,3 +857,30 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
             <strong>{progress}%</strong>
           </div>
         )}
+        {step === 'review' && (
+          <div className="sheet-body review-body">
+            <div className={draft.length ? 'review-note' : 'review-note needs-help'}>
+              <ListChecks size={18} />
+              <p>
+                <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
+                <span>{draft.length ? '请按星期检查，点错的地方可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
+              </p>
+            </div>
+            <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
+            <div className="period-list compact-list">{PERIODS.map((period) => {
+              const slot = draft.find((item) => item.day === day && item.period === period)
+              return <label className="period-row" key={`${day}-${period}`}><span>{period}</span><input value={slot?.name ?? ''} onChange={(event) => updateDraft(period, event.target.value)} placeholder="无课程" /></label>
+            })}</div>
+            {candidates.length > 0 && <div className="candidate-box"><p><strong>快速补充课程</strong><span>点击添加到{DAY_NAMES[day]}</span></p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
+            <details className="ocr-details">
+              <summary>查看识别原文（{ocrText.length} 个字）</summary>
+              <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
+            </details>
+            <button className="primary-button wide" disabled={!draft.length} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
