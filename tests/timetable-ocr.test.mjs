@@ -12,7 +12,7 @@ const compiled = ts.transpileModule(helpers, {
 }).outputText
 const context = vm.createContext({})
 vm.runInContext(compiled, context)
-const { matchGridCourse, preferCourse, findEvenlySpacedBounds } = context
+const { matchGridCourse, preferCourse, findEvenlySpacedBounds, parseExplicitPeriodLabel } = context
 
 test('cut-off short text is not arbitrarily replaced with Chinese', () => {
   for (const raw of ['年灰', '年灵', '(本瘟', '证女', 'abc', '']) assert.equal(matchGridCourse(raw), '')
@@ -45,4 +45,13 @@ test('retain multiline descriptions and existing short-course support', () => {
 test('half-width subdivisions are not mistaken for weekday boundaries', () => {
   const lines = [54, 106, 137, 234, 317, 410, 493, 586, 668, 762, 845, 938, 1020, 1113]
   assert.deepEqual(Array.from(findEvenlySpacedBounds(lines, 6, 1170, 0.16)), [234, 410, 586, 762, 938, 1113])
+})
+
+test('explicit period labels are authoritative over row order', () => {
+  assert.equal(parseExplicitPeriodLabel('第一节'), 1)
+  assert.equal(parseExplicitPeriodLabel('第2节'), 2)
+  assert.equal(parseExplicitPeriodLabel('第五节'), 5)
+  assert.equal(parseExplicitPeriodLabel('早自习'), null)
+  assert.equal(parseExplicitPeriodLabel('午休'), null)
+  assert.equal(parseExplicitPeriodLabel('晚自习'), null)
 })
