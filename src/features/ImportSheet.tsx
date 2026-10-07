@@ -127,7 +127,13 @@ function findEvenlySpacedBounds(lines: number[], count: number, width: number, m
       const score = candidate.reduce((sum, value, index) => (
         sum + Math.abs(value - (start + step * index)) / step
       ), 0) / count
-      if (!best || score < best.score) best = { lines: candidate, score }
+      // 有“节次”列的课表会出现 7 条等距竖线（节次列 + 周一至周五）。
+      // 同样精确的 6 条线必须选靠右的一组，否则周一会被误当成节次列，
+      // 导致周一全空、周二读成周一。
+      if (!best || score < best.score - 0.001 ||
+          (Math.abs(score - best.score) <= 0.001 && end > best.lines.at(-1)!)) {
+        best = { lines: candidate, score }
+      }
     }
   }
   return best && best.score < maxScore ? best.lines : null
@@ -447,7 +453,7 @@ async function recognizeGridTimetable(
       await worker.setParameters({ tessedit_pageseg_mode: '7' })
       const labelImage = await createOriginalCell(source, 8, first.top + 2, labelRight, first.bottom - 2, 3)
       const labelResult = await worker.recognize(labelImage, {}, { text: true })
-      const label = String(labelResult.data?.text ?? '').replace(/\\s+/g, '')
+      const label = String(labelResult.data?.text ?? '').replace(/\s+/g, '')
       leadingStudyRow = /早.{0,2}习|早读|晨读|自习/.test(label)
     } catch (error) {
       console.warn('早自习行检测失败，保持原有节次', error)
