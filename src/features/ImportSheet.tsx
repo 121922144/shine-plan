@@ -133,6 +133,24 @@ function findEvenlySpacedBounds(lines: number[], count: number, width: number, m
   return best && best.score < maxScore ? best.lines : null
 }
 
+function parseSpecialPeriodLabel(value: string) {
+  const clean = normalizeCourseName(value).replace(/[^\p{L}\p{N}]/gu, '')
+  if (!clean) return null
+  const candidates = ['早自习', '早读', '午休', '午餐午休', '晚自习']
+  const exact = candidates.find((candidate) => clean.includes(candidate))
+  if (exact) return exact
+  // 小尺寸课表中的中文 OCR 很容易出现一两个错字，例如“早自习”可能读成“早上E”。
+  // 对短标签允许较宽的编辑距离，但必须保留“早 / 午 / 晚”等关键字。
+  const head = clean[0]
+  if (head !== '早' && head !== '午' && head !== '晚') return null
+  const ranked = candidates
+    .filter((candidate) => candidate[0] === head)
+    .map((candidate) => ({ candidate, distance: editDistance(clean, candidate) }))
+    .sort((a, b) => a.distance - b.distance)
+  const best = ranked[0]
+  return best && best.distance <= Math.max(1, Math.ceil(best.candidate.length * 0.5)) ? best.candidate : null
+}
+
 function parseExplicitPeriodLabel(value: string) {
   const clean = value
     .replace(/[\s\n\r]/g, '')
@@ -472,14 +490,43 @@ async function recognizeGridTimetable(
     }
   }
 
-  const hasExplicitPeriods = explicitPeriodByRow.size > 0
-  const indexedPeriodRows = hasExplicitPeriods
+  // 同时识别“早自习 / 午休 / 晚自习”等非课程行。即使“第 N 节”文字 OCR 失败，
+  // 也不能让这些行占用课程编号。
+  const specialPeriodRows = new Set<number>()
+  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
+    const row = periodRows[rowIndex]
+    const variants = [
+      { originalScale: 1.5 },
+      { originalScale: 2 },
+      {},
+      { threshold: 140 },
+    ] as Array<{ originalScale?: number; threshold?: number }>
+    for (const variant of variants) {
+      const blob = variant.originalScale
+        ? await createOriginalCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.originalScale)
+        : await createEnhancedCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.threshold)
+      const result = await worker.recognize(blob, {}, { text: true })
+      if (parseSpecialPeriodLabel(String(result.data?.text ?? ''))) {
+        specialPeriodRows.add(rowIndex)
+        break
+      }
+    }
+  }
+
+  // 只有明确识别到至少 3 个“第 N 节”标签时，才使用文字标签建立节次映射；
+  // 否则回退到“过滤掉早自习/午休/晚自习后按课程行顺序编号”，避免单个误识别造成错位。
+  const hasEnoughExplicitPeriods = explicitPeriodByRow.size >= 3
+  const indexedPeriodRows = hasEnoughExplicitPeriods
     ? periodRows
       .map((row, rowIndex) => ({ row, rowIndex, period: explicitPeriodByRow.get(rowIndex) ?? null }))
       .filter((item) => item.period !== null)
       .map((item) => ({ ...item, period: item.period as number }))
       .filter((item, index, items) => items.findIndex((candidate) => candidate.period === item.period) === index)
-    : periodRows.slice(0, 8).map((row, rowIndex) => ({ row, rowIndex, period: rowIndex + 1 }))
+    : periodRows
+      .map((row, rowIndex) => ({ row, rowIndex }))
+      .filter((item) => !specialPeriodRows.has(item.rowIndex))
+      .slice(0, 8)
+      .map((item, index) => ({ ...item, period: index + 1 }))
 
   if (indexedPeriodRows.length < 3) return null
 
