@@ -364,6 +364,21 @@ async function recognizeGridTimetable(
   // 从候选线中挑出六条真正的星期边界。
   const dayBounds = findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
   if (!dayBounds) return null
+  // 每个星期的最后一条竖线必须是表格右边界。
+  // 如果选到节次列 + 周一至周四，周一会全部空白。
+  const rightmostTableLine = verticalLines.at(-1)
+  if (rightmostTableLine !== undefined &&
+      rightmostTableLine - dayBounds[5] > source.width * 0.07) {
+    const corrected = findEvenlySpacedBounds(
+      verticalLines.filter((line) => line >= dayBounds[0] && line <= rightmostTableLine),
+      6,
+      source.width,
+      0.25,
+    )
+    if (corrected && Math.abs(corrected[5] - rightmostTableLine) < source.width * 0.025) {
+      dayBounds.splice(0, dayBounds.length, ...corrected)
+    }
+  }
 
   const majorHorizontalPixels: number[] = []
   const minorHorizontalPixels: number[] = []
