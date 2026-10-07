@@ -382,7 +382,7 @@ async function recognizeGridTimetable(
   // 不再用未锚定的等距搜索重复选回错误的六条线。
   const rightmostTableLine = verticalLines.at(-1)
   if (rightmostTableLine !== undefined &&
-      rightmostTableLine > source.width * 0.85 &&
+      rightmostTableLine > source.width * 0.75 &&
       rightmostTableLine - dayBounds[5] > source.width * 0.07) {
     let bestRightAnchored: { bounds: number[]; score: number } | null = null
     for (const left of verticalLines) {
@@ -509,6 +509,7 @@ async function recognizeGridTimetable(
   const slots: Slot[] = []
   const rawLines: string[] = []
   rawLines.push(`网格边界：原始竖线 [${verticalLines.join(', ')}]；星期边界 [${dayBounds.join(', ')}]`)
+  rawLines.push(`图片宽度：${source.width}；右边界：${rightmostTableLine ?? '无'}；右边界比例：${rightmostTableLine === undefined ? '无' : (rightmostTableLine / source.width).toFixed(3)}`)
   rawLines.push(`识别课程行：${periodRows.length}；跳过早自习：${leadingStudyRow ? '是' : '否'}`)
   if (leadingStudyRow) rawLines.push('检测到早自习行，已跳过，不计入第一节')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
