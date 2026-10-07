@@ -133,6 +133,20 @@ function findEvenlySpacedBounds(lines: number[], count: number, width: number, m
   return best && best.score < maxScore ? best.lines : null
 }
 
+function parseExplicitPeriodLabel(value: string) {
+  const clean = value
+    .replace(/[\s\n\r]/g, '')
+    .replace(/[：:、.。|｜]/g, '')
+  const match = clean.match(/第([一二三四五六七八1-8])(?:节|課|课)/)
+    ?? clean.match(/^([一二三四五六七八1-8])(?:节|課|课)$/)
+  if (!match) return null
+  const numberMap: Record<string, number> = {
+    一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8,
+  }
+  const period = numberMap[match[1]] ?? Number(match[1])
+  return period >= 1 && period <= 8 ? period : null
+}
+
 function editDistance(left: string, right: string) {
   const row = Array.from({ length: right.length + 1 }, (_, index) => index)
   for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
@@ -433,13 +447,46 @@ async function recognizeGridTimetable(
       if (periodDivider !== undefined) return verticalDividerRatio(periodDivider, row.top, row.bottom) > 0.55
       return looksLikeCourseRow || hasPeriodLabel
     })
-    .slice(0, 8)
   if (periodRows.length < 3) return null
+
+  // 如果左侧明确写了“第 N 节”，节次以标签为准，而不是按格子出现顺序。
+  // 早自习、午休、晚自习等没有“第 N 节”标签的行不会占用课程节次。
+  const explicitPeriodByRow = new Map<number, number>()
+  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
+    const row = periodRows[rowIndex]
+    for (const variant of [
+      { originalScale: 1.5 },
+      { originalScale: 2 },
+      {},
+      { threshold: 140 },
+    ] as Array<{ originalScale?: number; threshold?: number }>) {
+      const blob = variant.originalScale
+        ? await createOriginalCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.originalScale)
+        : await createEnhancedCell(source, 28, row.top + 3, Math.max(29, dayBounds[0] - 3), row.bottom - 3, variant.threshold)
+      const result = await worker.recognize(blob, {}, { text: true })
+      const period = parseExplicitPeriodLabel(String(result.data?.text ?? ''))
+      if (period !== null) {
+        explicitPeriodByRow.set(rowIndex, period)
+        break
+      }
+    }
+  }
+
+  const hasExplicitPeriods = explicitPeriodByRow.size > 0
+  const indexedPeriodRows = hasExplicitPeriods
+    ? periodRows
+      .map((row, rowIndex) => ({ row, rowIndex, period: explicitPeriodByRow.get(rowIndex) ?? null }))
+      .filter((item) => item.period !== null)
+      .map((item) => ({ ...item, period: item.period as number }))
+      .filter((item, index, items) => items.findIndex((candidate) => candidate.period === item.period) === index)
+    : periodRows.slice(0, 8).map((row, rowIndex) => ({ row, rowIndex, period: rowIndex + 1 }))
+
+  if (indexedPeriodRows.length < 3) return null
 
   const slots: Slot[] = []
   const rawLines: string[] = []
   const recognizedCells = new Map<string, { course: string; raw: string }>()
-  const totalCells = periodRows.length * 5
+  const totalCells = indexedPeriodRows.length * 5
   let completed = 0
   let activePageSegmentation = '7'
 
@@ -455,8 +502,8 @@ async function recognizeGridTimetable(
     return total > 0 && darkCount / total > 0.18
   }
 
-  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
-    const row = periodRows[rowIndex]
+  for (let indexedRowIndex = 0; indexedRowIndex < indexedPeriodRows.length; indexedRowIndex += 1) {
+    const { row, rowIndex, period } = indexedPeriodRows[indexedRowIndex]
     const rowHeight = row.bottom - row.top
     for (let column = 0; column < 5; column += 1) {
       const left = dayBounds[column] + 3
@@ -541,11 +588,11 @@ async function recognizeGridTimetable(
         }
       }
       const raw = Array.from(new Set(rawValues)).join(' / ')
-      const cellKey = `${column + 1}-${rowIndex + 1}`
+      const cellKey = `${column + 1}-${period}`
       if (course) {
         recognizedCells.set(cellKey, { course, raw })
-        rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw} → ${course}`)
-      } else if (raw) rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${raw}（未采用）`)
+        rawLines.push(`${DAY_NAMES[column + 1]} 第${period}节：${raw} → ${course}`)
+      } else if (raw) rawLines.push(`${DAY_NAMES[column + 1]} 第${period}节：${raw}（未采用）`)
       completed += 1
       onProgress(12 + Math.round((completed / totalCells) * 82), `正在逐格读取课程（${completed}/${totalCells}）…`)
     }
@@ -553,16 +600,20 @@ async function recognizeGridTimetable(
 
   // 课程表会使用纵向合并单元格（本图周一第 6、7 节的“身心成长”）。
   // 只有当相邻两行之间在该列确实没有横线时才向下延展，避免把普通空课误填成上一节课程。
-  for (let rowIndex = 1; rowIndex < periodRows.length; rowIndex += 1) {
+  for (let indexedRowIndex = 1; indexedRowIndex < indexedPeriodRows.length; indexedRowIndex += 1) {
+    const current = indexedPeriodRows[indexedRowIndex]
+    const previousRow = indexedPeriodRows[indexedRowIndex - 1]
+    // 只有真实相邻的节次才允许沿用上一格的课程，避免跨过早自习/午休等非课程行。
+    if (current.period !== previousRow.period + 1) continue
     for (let column = 0; column < 5; column += 1) {
-      const currentKey = `${column + 1}-${rowIndex + 1}`
+      const currentKey = `${column + 1}-${current.period}`
       if (recognizedCells.has(currentKey)) continue
-      const previousKey = `${column + 1}-${rowIndex}`
+      const previousKey = `${column + 1}-${previousRow.period}`
       const previous = recognizedCells.get(previousKey)
-      const boundary = periodRows[rowIndex].top
+      const boundary = current.row.top
       if (!previous || hasCellDivider(dayBounds[column], dayBounds[column + 1], boundary)) continue
       recognizedCells.set(currentKey, { course: previous.course, raw: `${previous.raw}（合并单元格）` })
-      rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${previous.course}（合并单元格） → ${previous.course}`)
+      rawLines.push(`${DAY_NAMES[column + 1]} 第${current.period}节：${previous.course}（合并单元格） → ${previous.course}`)
     }
   }
 
