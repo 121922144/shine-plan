@@ -554,14 +554,42 @@ async function recognizeGridTimetable(
     }
   }
 
-  // 只有明确识别到至少 3 个“第 N 节”标签时，才使用文字标签建立节次映射；
-  // 否则回退到“过滤掉早自习/午休/晚自习后按课程行顺序编号”，避免单个误识别造成错位。
-  const hasEnoughExplicitPeriods = explicitPeriodByRow.size >= 3
-  const indexedPeriodRows = hasEnoughExplicitPeriods
+  // 明确的“第 N 节”标签是节次的权威来源。即使只识别到一两个标签，
+  // 也必须用它们作为锚点；绝不能让“早自习 / 午休”占用第 1、5 节。
+  // 对没有识别出标签的课程行，仅在两个已知锚点之间补齐缺失的连续节次。
+  const labeledRows = Array.from(explicitPeriodByRow.entries())
+    .filter(([rowIndex]) => !specialPeriodRows.has(rowIndex))
+    .sort((a, b) => a[0] - b[0])
+  const mappedPeriods = new Map<number, number>(labeledRows)
+  if (labeledRows.length > 0) {
+    // 锚点前只允许回填正数节次，锚点后只允许补到第八节；
+    // 已知的特殊行永远跳过，避免再发生整体偏移。
+    for (let anchor = 0; anchor < labeledRows.length; anchor += 1) {
+      const [rowIndex, period] = labeledRows[anchor]
+      const next = labeledRows[anchor + 1]
+      const nextRow = next ? next[0] : periodRows.length
+      let expected = period + 1
+      for (let candidateRow = rowIndex + 1; candidateRow < nextRow; candidateRow += 1) {
+        if (specialPeriodRows.has(candidateRow)) continue
+        if (next && expected >= next[1]) break
+        if (expected > 8) break
+        mappedPeriods.set(candidateRow, expected++)
+      }
+    }
+    const [firstRow, firstPeriod] = labeledRows[0]
+    let expected = firstPeriod - 1
+    for (let candidateRow = firstRow - 1; candidateRow >= 0 && expected >= 1; candidateRow -= 1) {
+      if (specialPeriodRows.has(candidateRow)) continue
+      mappedPeriods.set(candidateRow, expected--)
+    }
+  }
+
+  // 没有任何有效节次锚点时，仍排除早自习/午休等特殊行，
+  // 并在原文中明确标记采用了顺序兜底，便于后续诊断。
+  const indexedPeriodRows = labeledRows.length > 0
     ? periodRows
-      .map((row, rowIndex) => ({ row, rowIndex, period: explicitPeriodByRow.get(rowIndex) ?? null }))
-      .filter((item) => item.period !== null)
-      .map((item) => ({ ...item, period: item.period as number }))
+      .map((row, rowIndex) => ({ row, rowIndex, period: mappedPeriods.get(rowIndex) }))
+      .filter((item): item is { row: { top: number; bottom: number }; rowIndex: number; period: number } => item.period !== undefined)
       .filter((item, index, items) => items.findIndex((candidate) => candidate.period === item.period) === index)
     : periodRows
       .map((row, rowIndex) => ({ row, rowIndex }))
@@ -574,6 +602,8 @@ async function recognizeGridTimetable(
   const slots: Slot[] = []
   const rawLines: string[] = []
   if (rawSpecialColumnLabels) rawLines.push(`左侧节次 OCR：${rawSpecialColumnLabels}`)
+  rawLines.push(`节次映射：${indexedPeriodRows.map(({ rowIndex, period }) => `行${rowIndex + 1}→第${period}节`).join('、')}`)
+  if (!labeledRows.length) rawLines.push('提示：未识别到明确节次标签，已使用顺序兜底')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
   const totalCells = indexedPeriodRows.length * 5
   let completed = 0
