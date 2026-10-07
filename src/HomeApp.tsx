@@ -23,6 +23,23 @@ const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+let deviceTokenPromise: Promise<string> | null = null
+
+async function ensureDeviceToken() {
+  const existing = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
+  if (existing) return existing
+  if (!deviceTokenPromise) {
+    deviceTokenPromise = apiRequest<{ token: string }>('/api/device', '', { method: 'POST' })
+      .then(({ token }) => {
+        localStorage.setItem(DEVICE_TOKEN_KEY, token)
+        return token
+      })
+      .finally(() => {
+        deviceTokenPromise = null
+      })
+  }
+  return deviceTokenPromise
+}
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -166,11 +183,7 @@ export default function HomeApp() {
     let cancelled = false
     const syncCloud = async () => {
       try {
-        let token = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
-        if (!token) {
-          const created = await apiRequest<{ token: string }>('/api/device', '', { method: 'POST' })
-          token = created.token; localStorage.setItem(DEVICE_TOKEN_KEY, token)
-        }
+        let token = await ensureDeviceToken()
         let state: CloudState
         try { state = await apiRequest<CloudState>('/api/state', token) }
         catch (error) {
@@ -229,8 +242,7 @@ export default function HomeApp() {
     if (isIos && !isStandalone) return showToast('请先添加到主屏幕，再从桌面打开并开启提醒')
     if (!('Notification' in window)) return showToast('当前浏览器不支持通知')
     try {
-      const token = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
-      if (!token) throw new Error('云端连接尚未完成，请稍后重试')
+      const token = await ensureDeviceToken()
       if (await Notification.requestPermission() !== 'granted') throw new Error('需要允许通知才能提醒你')
       const registration = await navigator.serviceWorker.ready
       const config = await apiRequest<{ pushAvailable: boolean; vapidPublicKey: string }>('/api/config')
