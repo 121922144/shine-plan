@@ -436,10 +436,29 @@ async function recognizeGridTimetable(
     .slice(0, 8)
   if (periodRows.length < 3) return null
 
+  // 只对带有明确“早自习”行的课表启用特殊处理；普通课表仍使用旧版行号，
+  // 避免上一版按不完整节次 OCR 推算导致的回归。
+  // 左侧标签只读第一行，不能因为其他行 OCR 不清晰就重排所有课程。
+  let leadingStudyRow = false
+  if (periodRows.length >= 2) {
+    const first = periodRows[0]
+    const labelRight = Math.max(24, dayBounds[0] - 4)
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: '7' })
+      const labelImage = await createOriginalCell(source, 8, first.top + 2, labelRight, first.bottom - 2, 3)
+      const labelResult = await worker.recognize(labelImage, {}, { text: true })
+      const label = String(labelResult.data?.text ?? '').replace(/\\s+/g, '')
+      leadingStudyRow = /早.{0,2}习|早读|晨读|自习/.test(label)
+    } catch (error) {
+      console.warn('早自习行检测失败，保持原有节次', error)
+    }
+  }
+  const courseRows = leadingStudyRow ? periodRows.slice(1) : periodRows
   const slots: Slot[] = []
   const rawLines: string[] = []
+  if (leadingStudyRow) rawLines.push('检测到早自习行，已跳过，不计入第一节')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
-  const totalCells = periodRows.length * 5
+  const totalCells = courseRows.length * 5
   let completed = 0
   let activePageSegmentation = '7'
 
@@ -455,8 +474,8 @@ async function recognizeGridTimetable(
     return total > 0 && darkCount / total > 0.18
   }
 
-  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
-    const row = periodRows[rowIndex]
+  for (let rowIndex = 0; rowIndex < courseRows.length; rowIndex += 1) {
+    const row = courseRows[rowIndex]
     const rowHeight = row.bottom - row.top
     for (let column = 0; column < 5; column += 1) {
       const left = dayBounds[column] + 3
@@ -553,13 +572,13 @@ async function recognizeGridTimetable(
 
   // 课程表会使用纵向合并单元格（本图周一第 6、7 节的“身心成长”）。
   // 只有当相邻两行之间在该列确实没有横线时才向下延展，避免把普通空课误填成上一节课程。
-  for (let rowIndex = 1; rowIndex < periodRows.length; rowIndex += 1) {
+  for (let rowIndex = 1; rowIndex < courseRows.length; rowIndex += 1) {
     for (let column = 0; column < 5; column += 1) {
       const currentKey = `${column + 1}-${rowIndex + 1}`
       if (recognizedCells.has(currentKey)) continue
       const previousKey = `${column + 1}-${rowIndex}`
       const previous = recognizedCells.get(previousKey)
-      const boundary = periodRows[rowIndex].top
+      const boundary = courseRows[rowIndex].top
       if (!previous || hasCellDivider(dayBounds[column], dayBounds[column + 1], boundary)) continue
       recognizedCells.set(currentKey, { course: previous.course, raw: `${previous.raw}（合并单元格）` })
       rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${previous.course}（合并单元格） → ${previous.course}`)
