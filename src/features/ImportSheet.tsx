@@ -518,7 +518,22 @@ async function recognizeGridTimetable(
   const periodColumnLines = periodColumnText.split(/[\\r\\n]+/).map((line) => line.trim()).filter(Boolean)
   const rawSpecialColumnLabels = periodColumnLines.join(' / ')
 
+  // 如果整列 OCR 能稳定输出“一行对应一个表格行”，直接按垂直顺序把标签绑定到行。
+  // 这是比“按识别到的课程格顺序编号”更可靠的兜底：本图会得到
+  // 早自习 / 第一节 / 第二节 / … / 第六节 / 晚自习。
+  if (periodColumnLines.length === periodRows.length) {
+    periodColumnLines.forEach((label, rowIndex) => {
+      const period = parseExplicitPeriodLabel(label)
+      if (period !== null) explicitPeriodByRow.set(rowIndex, period)
+    })
+  }
+
   const specialPeriodRows = new Set<number>()
+  if (periodColumnLines.length === periodRows.length) {
+    periodColumnLines.forEach((label, rowIndex) => {
+      if (parseSpecialPeriodLabel(label)) specialPeriodRows.add(rowIndex)
+    })
+  }
   for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
     const row = periodRows[rowIndex]
     const variants = [
@@ -982,29 +997,3 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
             <strong>{progress}%</strong>
           </div>
         )}
-        {step === 'review' && (
-          <div className="sheet-body review-body">
-            <div className={draft.length ? 'review-note' : 'review-note needs-help'}>
-              <ListChecks size={18} />
-              <p>
-                <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
-                <span>{draft.length ? '请按星期检查，点错的地方可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
-              </p>
-            </div>
-            <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
-            <div className="period-list compact-list">{PERIODS.map((period) => {
-              const slot = draft.find((item) => item.day === day && item.period === period)
-              return <label className="period-row" key={`${day}-${period}`}><span>{period}</span><input value={slot?.name ?? ''} onChange={(event) => updateDraft(period, event.target.value)} placeholder="无课程" /></label>
-            })}</div>
-            {candidates.length > 0 && <div className="candidate-box"><p><strong>快速补充课程</strong><span>点击添加到{DAY_NAMES[day]}</span></p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
-            <details className="ocr-details">
-              <summary>查看识别原文（{ocrText.length} 个字）</summary>
-              <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
-            </details>
-            <button className="primary-button wide" disabled={!draft.length} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
