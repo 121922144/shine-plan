@@ -770,10 +770,16 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         user_defined_dpi: '300',
       })
       cellRecognition = true
-      const gridResult = await recognizeGridTimetable(file, worker, (nextProgress, nextStatus) => {
-        setProgress(nextProgress)
-        setStatus(nextStatus)
-      })
+      // 网格检测失败不应导致整次导入失败：保留原有整图识别兜底。
+      let gridResult: Awaited<ReturnType<typeof recognizeGridTimetable>> = null
+      try {
+        gridResult = await recognizeGridTimetable(file, worker, (nextProgress, nextStatus) => {
+          setProgress(nextProgress)
+          setStatus(nextStatus)
+        })
+      } catch (gridError) {
+        console.warn('课程表网格识别失败，尝试整图识别', gridError)
+      }
       let inferred: { slots: Slot[]; candidates: string[]; rawText: string }
       // 只要网格定位成功且至少读到一格，就保留逐格结果。
       // 低于 8 格并不代表网格失败：空课、合并格和低对比度单元格都可能让数量暂时偏少；
@@ -799,9 +805,10 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     } catch (reason) {
       console.error(reason)
       setStep('pick')
-      setError(worker
-        ? '识别没有成功。你可以换一张更清晰、拍正的图片重试，或直接填写课程。'
-        : '识别程序加载失败，请刷新页面后重试。')
+      const detail = reason instanceof Error ? reason.message : String(reason ?? '')
+      setError((worker
+        ? '识别没有成功。'
+        : '识别程序加载失败。') + (detail ? ` 错误信息：${detail.slice(0, 180)}` : ' 请刷新页面后重试。'))
     } finally {
       if (worker) await worker.terminate().catch(() => undefined)
     }
