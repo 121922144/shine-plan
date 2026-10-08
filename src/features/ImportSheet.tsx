@@ -210,6 +210,10 @@ function preferCourse(raw: string, candidate: string, current: { name: string; e
 function matchGridCourse(value: string) {
   const compact = normalizeCourseName(value).replace(/\s+/g, '')
   if (/^康(?:陈[\p{L}]{1,3})?$/u.test(compact)) return '康'
+  // 课程名称被单元格边界截断时，OCR 可能只读出“道德与”。
+  // 这是课程表中“道德与法治”的独有前缀；不能要求完整四字都出现。
+  // 排除跨课程的额外文字，避免将普通噪声错误补全。
+  if (/^道德与(?:法治)?[|｜;；:：、，,.。!！]?$/u.test(compact)) return '道德与法治'
   if (compact.includes('班会') && compact.includes('心理健康')) {
     return compact.includes('升旗') ? '班会 · 心理健康（含升旗仪式）' : '班会 · 心理健康'
   }
