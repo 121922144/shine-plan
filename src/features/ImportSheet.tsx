@@ -639,6 +639,33 @@ async function recognizeGridTimetable(
           ? `${combined}（含升旗仪式）` : combined
       }
 
+      // “英语/英语口语”是同一单元格的完整课程名，不能只保留 OCR
+      // 多次识别中先命中的“英语”或“英语口语”。尝试对完整格进行稀疏文本识别，
+      // 并综合本格各次识别结果；仅有双课程或分隔符证据时才合并。
+      if (rawValues.some((value) => value.includes('英语')) &&
+          !rawValues.some((value) => /英语\s*[/／、|｜]\s*英语口语/.test(value))) {
+        for (const segmentation of ['11', '3']) {
+          if (activePageSegmentation !== segmentation) {
+            await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+            activePageSegmentation = segmentation
+          }
+          const englishBlob = await createOriginalCell(source, left, top, right, bottom, 2)
+          const englishResult = await worker.recognize(englishBlob, {}, { text: true })
+          const englishRaw = String(englishResult.data?.text ?? '').replace(/\s+/g, '')
+          if (englishRaw) rawValues.push(englishRaw)
+          if (/英语\s*[/／、|｜]\s*英语口语/.test(englishRaw)) break
+        }
+      }
+      const englishFull = rawValues.some((value) =>
+        /英语\s*[/／、|｜]\s*英语口语|英语英语口语/.test(value))
+      const englishSlash = rawValues.some((value) => /英语\s*[/／|｜]/.test(value))
+      const englishSpoken = rawValues.some((value) => value.includes('英语口语'))
+      const englishPlain = rawValues.some((value) => /英语(?!口语)/.test(value))
+      if (englishFull || (englishSlash && englishSpoken) ||
+          (englishPlain && englishSpoken && rawValues.some((value) => /[/／|｜]/.test(value)))) {
+        course = '英语/英语口语'
+      }
+
       // 第 7 节一格内会再用竖线分成左右两个课程，例如“延时服务｜素质拓展”。
       // 整格 OCR 往往只读到左半边，因此检测内部竖线后分别识别两半并合并结果。
       const cellWidth = right - left
