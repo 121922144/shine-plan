@@ -20,7 +20,7 @@ export const courseIconMap = [
 ] as const
 
 // 未匹配到课程时使用通用书本图标；与“无课程/休息”插画区分开。
-export const fallbackCourseIcon = 'default-course-icon'
+export const fallbackCourseIcon = `${iconRoot}/default-course.svg`
 
 export function resolveCourseIcon(name: string): string {
   const normalized = name.replace(/\s+/g, '')
