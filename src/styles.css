@@ -4125,3 +4125,36 @@ input:focus-visible {
     font-size: 15px;
   }
 }
+
+/* Floating navigation: scrollable content continues behind the translucent dock.
+   Keep the dock close to the iPhone home indicator without covering it. */
+.phone-frame {
+  position: relative;
+}
+
+.phone-frame > .page-content {
+  padding-bottom: calc(104px + env(safe-area-inset-bottom));
+}
+
+.phone-frame > .bottom-nav {
+  position: absolute;
+  z-index: 30;
+  left: 10px;
+  right: 10px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  width: auto;
+  margin: 0;
+  padding: 7px 10px 8px;
+  border: 1px solid rgba(232, 235, 231, .72);
+  border-radius: 23px;
+  background: rgba(255, 254, 250, .82);
+  box-shadow: 0 5px 22px rgba(82, 115, 142, .13);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+@media (min-width: 521px) {
+  .phone-frame > .bottom-nav {
+    bottom: 12px;
+  }
+}
