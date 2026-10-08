@@ -253,6 +253,7 @@ export function SettingsPage({
   isStandalone: boolean;
 }) {
   const cloudOnline = cloudStatus.includes("已同步");
+  const reminderNeedsSetup = pushStatus.includes("未配置提醒服务");
 
   return (
     <section className="settings-page">
@@ -313,7 +314,9 @@ export function SettingsPage({
           <span>
             {reminder.enabled
               ? `后台推送已启用${reminder.lastSent ? `，最近发送于 ${reminder.lastSent}` : ""}。`
-              : "后台推送尚未开启，开启每日提醒后可收到课程通知。"}
+              : reminderNeedsSetup
+                ? "当前预览版还没有连接独立的后台提醒服务。可以先使用下方「添加到系统日历」，或等待后端配置完成。"
+                : "后台推送尚未开启，开启每日提醒后可收到课程通知。"}
           </span>
         </div>
 
@@ -348,7 +351,7 @@ export function SettingsPage({
               <Cloud />
             </span>
             <div>
-              <h3>匿名云端保存</h3>
+              <h3>{cloudOnline ? "匿名云端保存" : "本机保存"}</h3>
               <p>{cloudStatus}</p>
             </div>
             <span
@@ -366,7 +369,9 @@ export function SettingsPage({
           清空课程与日期提醒
         </button>
         <p className="local-note">
-          课程表图片不会上传；只有确认后的课程和日期提醒会匿名保存。
+          {cloudOnline
+            ? "课程表图片不会上传；只有确认后的课程和日期提醒会匿名保存。"
+            : "课程表图片不会上传；课程与提醒时间暂保存在本机，清理浏览器数据可能会丢失。"} 
         </p>
         <p className="settings-footer">
           <img src="/assets/icons/star.png" alt="" />
