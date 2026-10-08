@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+<linearGradient id="cover" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8ad1ff"/><stop offset=".5" stop-color="#4ca8f3"/><stop offset="1" stop-color="#277bdb"/></linearGradient>
+<linearGradient id="pages" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff9e7"/><stop offset="1" stop-color="#e8e1cf"/></linearGradient>
+<filter id="shadow" x="-25%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#4a86b9" flood-opacity=".25"/></filter>
+</defs>
+<g filter="url(#shadow)" transform="rotate(9 64 64)">
+<rect x="26" y="12" width="78" height="103" rx="10" fill="#2c84d9"/>
+<rect x="35" y="14" width="70" height="96" rx="7" fill="url(#pages)" stroke="#b7d3e7" stroke-width="2"/>
+<path d="M29 13Q29 8 36 8H95Q100 8 100 15V104Q100 111 93 111H31Q25 111 25 104V20Q25 15 29 13Z" fill="url(#cover)" stroke="#67b9f4" stroke-width="2"/>
+<path d="M35 15V103" fill="none" stroke="#b8e5ff" stroke-opacity=".75" stroke-width="3"/>
+<path d="M63 56C55 42 51 42 46 47C40 57 48 69 63 75C75 69 81 60 76 52C72 46 67 50 63 56Z" fill="#a6d954" stroke="#85bb4c" stroke-width="1.5"/>
+<path d="M63 75C64 64 65 57 72 52M63 69L52 54" stroke="#74b44b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+<rect x="99" y="27" width="8" height="17" rx="3" fill="#f9d36d"/>
+</g></svg>
