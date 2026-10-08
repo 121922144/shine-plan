@@ -215,7 +215,13 @@ function matchGridCourse(value: string) {
   // 排除跨课程的额外文字，避免将普通噪声错误补全。
   if (/^道德与(?:法治)?[|｜;；:：、，,.。!！]?$/u.test(compact)) return '道德与法治'
   if (compact.includes('班会') && compact.includes('心理健康')) {
-    return compact.includes('升旗') ? '班会 · 心理健康（含升旗仪式）' : '班会 · 心理健康'
+    // OCR 已识别出连接词时保留课表原文，不统一替换成“·”。
+    const hasOriginalAnd = /班会与心理健康/.test(compact)
+    const hasOriginalDot = /班会[·•・]心理健康/.test(compact)
+    const course = hasOriginalAnd ? '班会与心理健康'
+      : hasOriginalDot ? '班会 · 心理健康'
+        : '班会与心理健康'
+    return compact.includes('升旗') ? `${course}（含升旗仪式）` : course
   }
   // 第 7 节有时会在同一个时间段里并列展示两种安排，不能只返回前半个课程名。
   const hasDelayService = compact.includes('延时服务') || compact.includes('服务延')
