@@ -4105,9 +4105,10 @@ input:focus-visible {
   position: relative;
 }
 
-/* The dock overlays the page; do not add artificial blank space below content. */
+/* Reserve just enough scrollable space to lift the last item fully above
+   the floating dock and its fade. This is shared by all three tabs. */
 .phone-frame > .page-content {
-  padding-bottom: 0;
+  padding-bottom: calc(124px + env(safe-area-inset-bottom));
 }
 
 /* Fade scrolling cards into the page background near the screen bottom,
