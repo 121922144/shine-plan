@@ -2049,14 +2049,28 @@ input:focus-visible {
   line-height: 1.45;
 }
 
-.import-sheet .icon-button {
+.import-sheet .sheet-header .icon-button {
+  position: relative;
   width: 44px;
   height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 50%;
   background: #f0f8fc;
   color: #4e789a;
   transition: background-color .16s ease, color .16s ease, transform .16s ease;
+}
+
+/* Center the actual icon glyph within each circular button on iOS Safari. */
+.import-sheet .sheet-header .icon-button > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  margin: 0;
+  transform: translate(-50%, -50%);
 }
 
 .import-sheet .icon-button:hover {
