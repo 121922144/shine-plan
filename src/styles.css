@@ -4122,10 +4122,14 @@ input:focus-visible {
   bottom: 0;
   height: calc(174px + env(safe-area-inset-bottom));
   pointer-events: none;
+  /* Fade higher up, then keep the lower part fully opaque so no
+     scrolling cards or footer text show beneath the dock/home indicator. */
   background: linear-gradient(
     to bottom,
-    transparent 0%,
-    transparent 12%,
+    rgba(255, 253, 248, 0) 0%,
+    rgba(255, 253, 248, .4) 18%,
+    rgba(255, 253, 248, .9) 40%,
+    var(--app-page-bg) 60%,
     var(--app-page-bg) 100%
   );
 }
