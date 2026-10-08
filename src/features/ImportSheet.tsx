@@ -481,7 +481,14 @@ async function recognizeGridTimetable(
       if (row.top < headerBottom || row.bottom - row.top < 20) return false
       const looksLikeCourseRow = fillRatio(row.top, row.bottom) > 0.15
       const hasPeriodLabel = row.bottom - row.top >= 40 && periodLabelRatio(row.top, row.bottom) > 0.012
-      // 有独立“节次 / 时间”两列时，用两列之间的竖线精准排除大课间、眼保健操和午休横条。
+      // 午休/早自习等横向合并的提示行通常没有周一至周五之间的竖线。
+      // 仅当 4 条星期分隔线全部缺失时跳过；普通空课程行仍有完整竖线，不受影响。
+      const weekdayDividers = dayBounds.slice(1, 5)
+      const intactWeekdayDividers = weekdayDividers.filter(
+        (x) => verticalDividerRatio(x, row.top, row.bottom) > 0.48,
+      ).length
+      if (intactWeekdayDividers === 0) return false
+      // 有独立“节次 / 时间”两列时，用两列之间的竖线排除非课程横条。
       if (periodDivider !== undefined) return verticalDividerRatio(periodDivider, row.top, row.bottom) > 0.55
       return looksLikeCourseRow || hasPeriodLabel
     })
