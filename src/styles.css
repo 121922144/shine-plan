@@ -2895,15 +2895,6 @@ input:focus-visible {
   line-height: 1.55;
 }
 
-.shine-home-active .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .shine-home-active .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -3430,7 +3421,7 @@ input:focus-visible {
 /* Schedule page — scoped so the confirmed home surface stays unchanged. */
 .schedule-page {
   min-height: 100%;
-  padding: 14px 14px 34px;
+  padding: 14px 14px 14px;
   background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
@@ -3945,15 +3936,6 @@ input:focus-visible {
   animation: skeleton-shift 1.4s ease-in-out infinite;
 }
 
-.app-shell:has(.schedule-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .app-shell:has(.schedule-page) .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -4066,15 +4048,6 @@ input:focus-visible {
 /* Settings keeps the shared navigation, with the same light blue treatment as the timetable. */
 .app-shell:has(.settings-page) .phone-frame {
   border-color: #ede8df;
-}
-
-.app-shell:has(.settings-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
 }
 
 .app-shell:has(.settings-page) .nav-button {
