@@ -10,7 +10,7 @@ export function CourseIcon({ src }: { src: string }) {
   return (
     <span className="shine-course-icon" aria-hidden="true" style={isScience ? { position: "relative" } : undefined}>
       {isScience && <FlaskConical style={{ position: "absolute", inset: "12.5%", width: "75%", height: "75%", color: "#60b8ed", zIndex: 0 }} />}
-      {failedSources.includes(displaySrc) ? <BookOpen /> : (
+      {displaySrc === fallbackCourseIcon || failedSources.includes(displaySrc) ? <BookOpen /> : (
         <img
           src={displaySrc}
           alt=""
