@@ -4110,6 +4110,25 @@ input:focus-visible {
   padding-bottom: 0;
 }
 
+/* Fade scrolling cards into the page background near the screen bottom,
+   like the reference screenshot. The dock floats above this fade. */
+.phone-frame::after {
+  content: '';
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(174px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 12%,
+    var(--app-page-bg) 100%
+  );
+}
+
 .phone-frame > .bottom-nav {
   position: absolute;
   z-index: 30;
@@ -4121,14 +4140,8 @@ input:focus-visible {
   padding: 7px 10px 8px;
   border: 1px solid rgba(232, 235, 231, .72);
   border-radius: 23px;
-  /* The top of the floating dock reveals scrolling content; the bottom is opaque. */
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 254, 250, 0) 0%,
-    rgba(255, 254, 250, .45) 34%,
-    rgba(255, 254, 250, .92) 66%,
-    rgba(255, 254, 250, 1) 100%
-  );
+  /* Keep the floating dock readable; the fade belongs behind it, not inside it. */
+  background: rgba(255, 254, 250, .98);
   box-shadow: 0 5px 22px rgba(82, 115, 142, .13);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
