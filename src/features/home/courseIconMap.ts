@@ -19,7 +19,8 @@ export const courseIconMap = [
   { names: ['无课程', '休息', '空课'], src: `${iconRoot}/no-course.png` },
 ] as const
 
-export const fallbackCourseIcon = `${iconRoot}/no-course.png`
+// 未匹配到课程时使用通用书本图标；与“无课程/休息”插画区分开。
+export const fallbackCourseIcon = 'default-course-icon'
 
 export function resolveCourseIcon(name: string): string {
   const normalized = name.replace(/\s+/g, '')
