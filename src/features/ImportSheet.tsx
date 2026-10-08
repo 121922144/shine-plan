@@ -656,12 +656,18 @@ async function recognizeGridTimetable(
           if (/英语\s*[/／、|｜]\s*英语口语/.test(englishRaw)) break
         }
       }
+      // 实际识别原文中，周一第5节出现“英语上语口语”“英庄&语口语”
+      // “英语|不语口语”：OCR 将分隔符及第二个“英”误读。
+      // 仅当同一个单元格里同时出现前缀和“语口语”后缀时纠正，
+      // 不把单独的“英语”或“英语口语”强制改为组合课程。
+      const englishWrapped = rawValues.some((value) =>
+        /英语.{0,3}语口语|英[语庄].{0,3}语口语/.test(value))
       const englishFull = rawValues.some((value) =>
         /英语\s*[/／、|｜]\s*英语口语|英语英语口语/.test(value))
       const englishSlash = rawValues.some((value) => /英语\s*[/／|｜]/.test(value))
       const englishSpoken = rawValues.some((value) => value.includes('英语口语'))
       const englishPlain = rawValues.some((value) => /英语(?!口语)/.test(value))
-      if (englishFull || (englishSlash && englishSpoken) ||
+      if (englishFull || englishWrapped || (englishSlash && englishSpoken) ||
           (englishPlain && englishSpoken && rawValues.some((value) => /[/／|｜]/.test(value)))) {
         course = '英语/英语口语'
       }
