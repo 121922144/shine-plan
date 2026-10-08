@@ -22,6 +22,8 @@ const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'b
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const cloudApiConfigured = import.meta.env.MODE !== 'vercel' || Boolean(API_BASE_URL)
+const missingReminderServiceMessage = '当前预览版尚未配置独立提醒服务，可先使用「添加到系统日历」'
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 let deviceTokenPromise: Promise<string> | null = null
 
@@ -31,6 +33,7 @@ async function ensureDeviceToken() {
   if (!deviceTokenPromise) {
     deviceTokenPromise = apiRequest<{ token: string }>('/api/device', '', { method: 'POST' })
       .then(({ token }) => {
+        if (!token || typeof token !== 'string') throw new Error('云端设备接口返回异常，请检查 API 后端')
         localStorage.setItem(DEVICE_TOKEN_KEY, token)
         return token
       })
@@ -55,8 +58,17 @@ async function apiRequest<T>(path: string, token = '', init: RequestInit = {}): 
   if (token) headers.set('authorization', `Bearer ${token}`)
   if (init.body) headers.set('content-type', 'application/json')
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
-  const data = await response.json().catch(() => ({})) as T & { error?: string }
-  if (!response.ok) throw new Error(data.error || '云端服务暂时不可用')
+  const isJson = response.headers.get('content-type')?.includes('application/json')
+  const data = isJson ? await response.json().catch(() => ({})) as T & { error?: string } : ({} as T & { error?: string })
+  if (!response.ok) {
+    const explanation = response.status === 404
+      ? '云端接口不存在，请检查独立 API 地址和部署'
+      : response.status >= 500
+        ? '云端接口异常，请检查后端服务及数据库配置'
+        : `云端请求失败（${response.status}）`
+    throw new Error(data.error || explanation)
+  }
+  if (!isJson) throw new Error('云端接口未正确连接，返回的不是接口数据')
   return data
 }
 
@@ -202,7 +214,12 @@ export default function HomeApp() {
         setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '后台提醒已开启' : '尚未开启')
       } catch { if (!cancelled) setCloudStatus('当前离线，数据已保存在手机') }
     }
-    syncCloud()
+    if (cloudApiConfigured) {
+      syncCloud()
+    } else {
+      setCloudStatus('云端未连接，课程仅保存在本机')
+      setPushStatus('当前预览版未配置提醒服务')
+    }
     return () => {
       cancelled = true; window.removeEventListener('beforeinstallprompt', onInstall)
       if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(idleId)
@@ -239,14 +256,16 @@ export default function HomeApp() {
   }
 
   const enableReminder = async () => {
+    if (!cloudApiConfigured) return showToast(missingReminderServiceMessage)
     if (isIos && !isStandalone) return showToast('请先添加到主屏幕，再从桌面打开并开启提醒')
     if (!('Notification' in window)) return showToast('当前浏览器不支持通知')
     try {
-      const token = await ensureDeviceToken()
+      // Request permission directly from the user gesture (required by iOS Home Screen apps).
       if (await Notification.requestPermission() !== 'granted') throw new Error('需要允许通知才能提醒你')
-      const registration = await navigator.serviceWorker.ready
       const config = await apiRequest<{ pushAvailable: boolean; vapidPublicKey: string }>('/api/config')
-      if (!config.pushAvailable) throw new Error('推送服务尚未配置完成')
+      if (!config.pushAvailable || !config.vapidPublicKey) throw new Error('后台推送密钥尚未配置，可先使用「添加到系统日历」')
+      const token = await ensureDeviceToken()
+      const registration = await navigator.serviceWorker.ready
       const existing = await registration.pushManager.getSubscription()
       const subscription = existing || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToArrayBuffer(config.vapidPublicKey) })
       await apiRequest('/api/push-subscriptions', token, { method: 'POST', body: JSON.stringify(subscription.toJSON()) })
