@@ -4105,14 +4105,14 @@ input:focus-visible {
   position: relative;
 }
 
-/* Reserve just enough scrollable space to lift the last item fully above
-   the floating dock and its fade. This is shared by all three tabs. */
+/* Small shared scroll clearance: the final card can scroll just above
+   the floating dock, without the large blank area previously left below it. */
 .phone-frame > .page-content {
-  padding-bottom: calc(124px + env(safe-area-inset-bottom));
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
 
-/* Fade scrolling cards into the page background near the screen bottom,
-   like the reference screenshot. The dock floats above this fade. */
+/* Keep the final card readable; fade only the area nearest the dock and
+   completely cover scrolling content below the iPhone home indicator. */
 .phone-frame::after {
   content: '';
   position: absolute;
@@ -4120,16 +4120,14 @@ input:focus-visible {
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(174px + env(safe-area-inset-bottom));
+  height: calc(106px + env(safe-area-inset-bottom));
   pointer-events: none;
-  /* Fade higher up, then keep the lower part fully opaque so no
-     scrolling cards or footer text show beneath the dock/home indicator. */
   background: linear-gradient(
     to bottom,
-    rgba(255, 253, 248, 0) 0%,
-    rgba(255, 253, 248, .4) 18%,
-    rgba(255, 253, 248, .9) 40%,
-    var(--app-page-bg) 60%,
+    transparent 0%,
+    transparent 30%,
+    rgba(255, 253, 248, .45) 56%,
+    var(--app-page-bg) 85%,
     var(--app-page-bg) 100%
   );
 }
