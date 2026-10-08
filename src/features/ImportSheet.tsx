@@ -582,6 +582,27 @@ async function recognizeGridTimetable(
         }
       }
 
+      // 对空白结果额外尝试放大原图与稀疏文本模式。
+      // 只在原有多轮识别都没有命中时运行，不改变其他已正确识别的课程。
+      if (!course) {
+        for (const scale of [2, 3]) {
+          for (const segmentation of ['6', '11']) {
+            if (activePageSegmentation !== segmentation) {
+              await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+              activePageSegmentation = segmentation
+            }
+            const retryBlob = await createOriginalCell(source, left, top, right, bottom, scale)
+            const retryResult = await worker.recognize(retryBlob, {}, { text: true })
+            const retryRaw = String(retryResult.data?.text ?? '').replace(/\s+/g, '')
+            if (retryRaw) rawValues.push(retryRaw)
+            bestCourse = preferCourse(retryRaw, matchGridCourse(retryRaw), bestCourse)
+            course = bestCourse.name
+            if (course) break
+          }
+          if (course) break
+        }
+      }
+
       // 第 7 节一格内会再用竖线分成左右两个课程，例如“延时服务｜素质拓展”。
       // 整格 OCR 往往只读到左半边，因此检测内部竖线后分别识别两半并合并结果。
       const cellWidth = right - left
