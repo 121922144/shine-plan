@@ -613,6 +613,32 @@ async function recognizeGridTimetable(
         }
       }
 
+      // 换行课程（如“班会与 / 心理健康”）可能被单行 OCR 只读成“班会”。
+      // 仅在本格已有“班会”证据时，补读下半格；只有识别到“心理健康”才合并。
+      if (rawValues.some((value) => value.includes('班会')) &&
+          !rawValues.some((value) => value.includes('心理健康'))) {
+        const lowerTop = Math.min(bottom - 8, top + Math.floor((bottom - top) * 0.35))
+        for (const segmentation of ['6', '11']) {
+          if (activePageSegmentation !== segmentation) {
+            await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+            activePageSegmentation = segmentation
+          }
+          const lowerBlob = await createOriginalCell(source, left, lowerTop, right, bottom, 2)
+          const lowerResult = await worker.recognize(lowerBlob, {}, { text: true })
+          const lowerRaw = String(lowerResult.data?.text ?? '').replace(/\s+/g, '')
+          if (lowerRaw) rawValues.push(lowerRaw)
+          if (lowerRaw.includes('心理健康')) break
+        }
+      }
+      if (rawValues.some((value) => value.includes('班会')) &&
+          rawValues.some((value) => value.includes('心理健康'))) {
+        const originalDot = rawValues.some((value) => /班会[·•・]心理健康/.test(value))
+        const originalAnd = rawValues.some((value) => /班会与心理健康|班会与$|^与心理健康/.test(value))
+        const combined = originalDot && !originalAnd ? '班会 · 心理健康' : '班会与心理健康'
+        course = rawValues.some((value) => value.includes('升旗'))
+          ? `${combined}（含升旗仪式）` : combined
+      }
+
       // 第 7 节一格内会再用竖线分成左右两个课程，例如“延时服务｜素质拓展”。
       // 整格 OCR 往往只读到左半边，因此检测内部竖线后分别识别两半并合并结果。
       const cellWidth = right - left
