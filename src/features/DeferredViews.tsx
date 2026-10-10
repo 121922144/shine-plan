@@ -313,7 +313,7 @@ export function SettingsPage({
           <BellRing />
           <span>
             {reminder.enabled
-              ? `后台推送已启用${reminder.lastSent ? `，最近发送于 ${reminder.lastSent}` : ""}。`
+              ? `通知订阅已开启${reminder.lastSent ? `，最近发送于 ${reminder.lastSent}` : ""}。每日定时发送需完成调度配置。`
               : reminderNeedsSetup
                 ? "当前预览版还没有连接独立的后台提醒服务。可以先使用下方「添加到系统日历」，或等待后端配置完成。"
                 : "后台推送尚未开启，开启每日提醒后可收到课程通知。"}
