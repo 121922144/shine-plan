@@ -21,9 +21,10 @@ type CloudState = { hasState: boolean; slots: Slot[]; notes: DateNote[]; reminde
 const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder' }
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const cloudApiConfigured = import.meta.env.MODE !== 'vercel' || Boolean(API_BASE_URL)
-const missingReminderServiceMessage = '当前预览版尚未配置独立提醒服务，可先使用「添加到系统日历」'
+// Vercel hosts the API in this same deployment; never forward to the old Sites backend.
+const API_BASE_URL = import.meta.env.MODE === 'vercel'
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 let deviceTokenPromise: Promise<string> | null = null
 
@@ -214,12 +215,7 @@ export default function HomeApp() {
         setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '后台提醒已开启' : '尚未开启')
       } catch { if (!cancelled) setCloudStatus('当前离线，数据已保存在手机') }
     }
-    if (cloudApiConfigured) {
-      syncCloud()
-    } else {
-      setCloudStatus('云端未连接，课程仅保存在本机')
-      setPushStatus('当前预览版未配置提醒服务')
-    }
+    syncCloud()
     return () => {
       cancelled = true; window.removeEventListener('beforeinstallprompt', onInstall)
       if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(idleId)
@@ -256,7 +252,6 @@ export default function HomeApp() {
   }
 
   const enableReminder = async () => {
-    if (!cloudApiConfigured) return showToast(missingReminderServiceMessage)
     if (isIos && !isStandalone) return showToast('请先添加到主屏幕，再从桌面打开并开启提醒')
     if (!('Notification' in window)) return showToast('当前浏览器不支持通知')
     try {
