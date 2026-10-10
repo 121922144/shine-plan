@@ -28,10 +28,12 @@ function localClock(date: Date, timezone: string) {
   }
 }
 
-export async function POST(request: Request) {
+async function dispatchReminders(request: Request) {
   const env = getRuntimeEnv()
   const authorization = request.headers.get('authorization') || ''
-  if (!env.DISPATCH_SECRET || authorization !== `Bearer ${env.DISPATCH_SECRET}`) {
+  const hasDispatchSecret = Boolean(env.DISPATCH_SECRET && authorization === `Bearer ${env.DISPATCH_SECRET}`)
+  const hasCronSecret = Boolean(env.CRON_SECRET && authorization === `Bearer ${env.CRON_SECRET}`)
+  if (!hasDispatchSecret && !hasCronSecret) {
     return json({ error: '无权执行提醒任务' }, { status: 401 })
   }
 
@@ -101,4 +103,14 @@ export async function POST(request: Request) {
   }
 
   return json({ checked: results.length, sent, skipped, failed })
+}
+
+// Vercel Cron invokes GET; an external scheduler may invoke POST.
+// Both use the same protected dispatch logic. Cron schedule is not enabled yet.
+export async function GET(request: Request) {
+  return dispatchReminders(request)
+}
+
+export async function POST(request: Request) {
+  return dispatchReminders(request)
 }
