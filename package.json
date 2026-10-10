@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@block65/webcrypto-web-push": "^1.0.2",
+    "@block65/webcrypto-web-push": "^2.0.0",
     "@openai/sites-vite-plugin": "^0.2.0",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "1.39.0",
