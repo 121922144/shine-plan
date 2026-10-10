@@ -14,7 +14,8 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "db:generate": "drizzle-kit generate",
     "db:local:migrate": "node scripts/apply-local-migrations.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "push:keys": "node scripts/generate-vapid-keys.mjs"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^2.0.0",
