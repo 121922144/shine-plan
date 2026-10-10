@@ -212,7 +212,7 @@ export default function HomeApp() {
         } else {
           await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({ slots: localSlots, notes: localNotes, reminder: localReminder, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' }) })
         }
-        setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '后台提醒已开启' : '尚未开启')
+        setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '通知订阅已开启，定时发送待配置' : '尚未开启')
       } catch { if (!cancelled) setCloudStatus('当前离线，数据已保存在手机') }
     }
     syncCloud()
@@ -264,7 +264,7 @@ export default function HomeApp() {
       const existing = await registration.pushManager.getSubscription()
       const subscription = existing || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToArrayBuffer(config.vapidPublicKey) })
       await apiRequest('/api/push-subscriptions', token, { method: 'POST', body: JSON.stringify(subscription.toJSON()) })
-      setReminder((value) => ({ ...value, enabled: true })); setPushStatus('后台提醒已开启'); showToast('提醒已开启，测试通知已发送')
+      setReminder((value) => ({ ...value, enabled: true })); setPushStatus('通知订阅已开启，定时发送待配置'); showToast('测试通知已发送，请查看手机系统通知')
     } catch (error) { showToast(error instanceof Error ? error.message : '提醒开启失败') }
   }
 
