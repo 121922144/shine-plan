@@ -1,4 +1,4 @@
-const CACHE = 'bag-plan-v12'
+const CACHE = 'bag-plan-v14'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png', '/backpack-mascot.png', '/home-hero-decorations.png?v=20260904-2']
 const IS_LOCAL_DEVELOPMENT = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname) && self.location.port === '5190'
 

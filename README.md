@@ -36,7 +36,7 @@ Vercel 使用独立的 Nitro 构建路径；不会改变本地开发或现有 Si
 
 连接 GitHub 后，`main` 的提交用于 Production，其他分支及 PR 用于 Preview。项目只有 `/` 页面；课表和设置在首页内切换，没有需要额外 SPA rewrite 的二级页面。静态资源使用根路径，例如 `/manifest.webmanifest`。Vercel 的 `VERCEL_URL` 用于未设置 `SITE_ORIGIN` 时的页面元数据地址。
 
-**Vercel 不连接现有 Sites 数据：**当前 `/api/*` 的默认实现依赖 Cloudflare D1 绑定，Vercel 不提供该绑定。Vercel Preview/Production 应分别配置 `VITE_API_BASE_URL`，指向一套新建且独立的 API 后端；不要填现有 Sites 地址。未配置时页面仍可打开，并使用浏览器本地数据，但不会进行跨设备同步或后台提醒。
+**Vercel + Neon 后端迁移中：**开发分支已将 `/api/*` 的数据库操作改为使用服务器端 `DATABASE_URL` 访问 Neon PostgreSQL。前后端使用同一个 Vercel 项目，同域名调用 `/api/*`，无需 `VITE_API_BASE_URL`。新建的 Neon 数据库需要先运行 [建表 SQL](scripts/neon-schema.sql) 才能正常读写，完整步骤见 [Neon 配置说明](docs/neon-setup.md)。Production 分支 `main` 不会自动包含开发分支的迁移改动。
 
 ### 环境变量
 
@@ -46,7 +46,7 @@ Vercel 使用独立的 Nitro 构建路径；不会改变本地开发或现有 Si
 | --- | --- |
 | 本地开发 | 使用默认地址；运行 `db:local:migrate` 后可在 `dev:cloudflare` 下测试本地 D1。按需在被忽略的 `.env.local` 设置提醒密钥。 |
 | Codespaces | 自动安装依赖并初始化独立本地 D1；密钥使用 Codespaces secrets，不能放进仓库。 |
-| Vercel Preview | 在 Preview 环境设置独立后端的 `VITE_API_BASE_URL`；不要填现有 Sites 地址。 |
-| Vercel Production | 在 Production 环境设置独立后端的 `VITE_API_BASE_URL`；不要填现有 Sites 地址。 |
+| Vercel Preview | 将 Neon 数据库连接到 `shine-plan` 的 Preview 环境并确认存在服务器端 `DATABASE_URL`；运行首次建表 SQL。 |
+| Vercel Production | Preview 验证通过后再把相同的 Neon 集成接入 Production，合并开发分支后部署。 |
 
-`VITE_API_BASE_URL` 是公开的 API 地址，会随前端代码发送到浏览器；数据库密码、VAPID 私钥和派发密钥不能放入 `VITE_` 变量。Preview 和 Production 可以指向同一套“新建数据库”，但不会接触现有 Sites 数据；如果需要环境隔离，可分别建立两套新数据库。
+`DATABASE_URL` 是私密的服务器端数据库连接串，只能作为 Vercel 环境变量由后端读取，绝不能放在任何 `VITE_` 变量中。预览与生产可以使用 Neon 分支隔离数据；切换 Production 之前，请先确认数据迁移需求。Web Push 仍需单独配置 VAPID 密钥和派发调度，数据库连通并不意味着每日提醒已经可以按时发送。

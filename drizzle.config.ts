@@ -1,3 +1,3 @@
 import { defineConfig } from 'drizzle-kit'
 
-export default defineConfig({ out: './drizzle', schema: './db/schema.ts', dialect: 'sqlite' })
+export default defineConfig({ out: './drizzle-neon', schema: './db/schema.ts', dialect: 'postgresql' })

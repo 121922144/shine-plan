@@ -1049,6 +1049,7 @@ input:focus-visible {
   --muted: #8192ab;
   --line: #ecf0f2;
   padding: 14px 14px 28px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .settings-content {
@@ -2048,14 +2049,28 @@ input:focus-visible {
   line-height: 1.45;
 }
 
-.import-sheet .icon-button {
+.import-sheet .sheet-header .icon-button {
+  position: relative;
   width: 44px;
   height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 50%;
   background: #f0f8fc;
   color: #4e789a;
   transition: background-color .16s ease, color .16s ease, transform .16s ease;
+}
+
+/* Center the actual icon glyph within each circular button on iOS Safari. */
+.import-sheet .sheet-header .icon-button > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  margin: 0;
+  transform: translate(-50%, -50%);
 }
 
 .import-sheet .icon-button:hover {
@@ -2221,7 +2236,7 @@ input:focus-visible {
   display: grid;
   isolation: isolate;
   min-height: 280px;
-  background: linear-gradient(135deg, #f2faff, #b5e2ff 65%, #a0d8ff);
+  background: linear-gradient(180deg, #f6f3ec 0%, #eef7ff 12%, #b5e2ff 65%, #a0d8ff 100%);
 }
 
 .shine-hero-art {
@@ -2894,15 +2909,6 @@ input:focus-visible {
   line-height: 1.55;
 }
 
-.shine-home-active .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .shine-home-active .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -3429,7 +3435,8 @@ input:focus-visible {
 /* Schedule page — scoped so the confirmed home surface stays unchanged. */
 .schedule-page {
   min-height: 100%;
-  padding: 14px 14px 34px;
+  padding: 14px 14px 14px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .schedule-banner {
@@ -3734,6 +3741,20 @@ input:focus-visible {
   text-overflow: ellipsis;
 }
 
+.schedule-course-copy h3 {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: #244c78;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schedule-course-copy input::placeholder {
   color: #9cabb6;
   font-weight: 500;
@@ -3929,15 +3950,6 @@ input:focus-visible {
   animation: skeleton-shift 1.4s ease-in-out infinite;
 }
 
-.app-shell:has(.schedule-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .app-shell:has(.schedule-page) .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -4027,6 +4039,10 @@ input:focus-visible {
     font-size: 15px;
   }
 
+  .schedule-course-copy h3 {
+    font-size: 15px;
+  }
+
   .schedule-course-status {
     font-size: 11px;
   }
@@ -4046,15 +4062,6 @@ input:focus-visible {
 /* Settings keeps the shared navigation, with the same light blue treatment as the timetable. */
 .app-shell:has(.settings-page) .phone-frame {
   border-color: #ede8df;
-}
-
-.app-shell:has(.settings-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
 }
 
 .app-shell:has(.settings-page) .nav-button {
@@ -4103,5 +4110,62 @@ input:focus-visible {
   .setting-row h3,
   .setting-action h3 {
     font-size: 15px;
+  }
+}
+
+/* Floating navigation: scrollable content continues behind the translucent dock.
+   Keep the dock close to the iPhone home indicator without covering it. */
+.phone-frame {
+  position: relative;
+}
+
+/* Small shared scroll clearance: the final card can scroll just above
+   the floating dock, without the large blank area previously left below it. */
+.phone-frame > .page-content {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+/* Keep the final card readable; fade only the area nearest the dock and
+   completely cover scrolling content below the iPhone home indicator. */
+.phone-frame::after {
+  content: '';
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(106px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 30%,
+    rgba(255, 253, 248, .45) 56%,
+    var(--app-page-bg) 85%,
+    var(--app-page-bg) 100%
+  );
+}
+
+.phone-frame > .bottom-nav {
+  position: absolute;
+  z-index: 30;
+  left: 10px;
+  right: 10px;
+  bottom: calc(2px + env(safe-area-inset-bottom));
+  width: auto;
+  margin: 0;
+  padding: 7px 10px 8px;
+  border: 1px solid rgba(232, 235, 231, .72);
+  border-radius: 23px;
+  /* Keep the floating dock readable; the fade belongs behind it, not inside it. */
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 5px 22px rgba(82, 115, 142, .13);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+@media (min-width: 521px) {
+  .phone-frame > .bottom-nav {
+    bottom: 12px;
   }
 }
