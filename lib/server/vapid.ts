@@ -7,7 +7,9 @@
  *
  * Never log or expose the raw contact address, or any signing key.
  */
-const validEmail = /^[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']+$/
+// A colon is forbidden inside a bare email, so "mailto:" cannot be mistaken
+// for part of the local email address and accidentally prefixed twice.
+const validEmail = /^[^@:\s<>"']+@[^@:\s<>"']+\.[^@:\s<>"']+$/
 
 export type SubjectValidation = {
   value: string | null
