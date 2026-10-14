@@ -19,6 +19,30 @@ type VapidDiagnostics = {
   signatureVerified: boolean
 }
 
+function subjectValidationDetails(subject: string) {
+  const value = subject.trim()
+  const validMailto = /^mailto:[^@\s<>"']+@[^@\s<>"']+\.[^@\s<>"']+$/
+  const validHttps = /^https:\/\/[^\s<>"']+$/
+  const valid = validMailto.test(subject) || validHttps.test(subject)
+
+  // Safe categorical diagnostics. Never return the user's email/address.
+  const issue = !subject
+    ? 'MISSING'
+    : /^VAPID_SUBJECT\s*=/.test(value)
+      ? 'KEY_NAME_INCLUDED'
+      : subject !== value
+        ? 'EXTRA_WHITESPACE'
+        : /^["']|["']$/.test(value)
+          ? 'QUOTES_INCLUDED'
+          : !(value.startsWith('mailto:') || value.startsWith('https://'))
+            ? 'MISSING_OR_INVALID_PREFIX'
+            : !valid
+              ? 'INVALID_SUBJECT_FORMAT'
+              : 'OK'
+
+  return { valid, issue }
+}
+
 /**
  * Web Push self-test. Do not return private keys, endpoints, token bodies,
  * signatures, or the subject address. Only expose validation booleans.
@@ -87,6 +111,13 @@ export async function GET(request: Request) {
       env.VAPID_PRIVATE_KEY || '',
       env.VAPID_SUBJECT || '',
     )
+    const subjectValidation = subjectValidationDetails(env.VAPID_SUBJECT || '')
+    data.subjectIssue = subjectValidation.issue
+    data.deployment = {
+      environment: env.VERCEL_ENV || 'unknown',
+      branch: env.VERCEL_GIT_COMMIT_REF || 'unknown',
+      commit: env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) || 'unknown',
+    }
     data.serverTimeUtc = new Date().toISOString()
   }
   return json(data)
