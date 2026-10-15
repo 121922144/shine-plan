@@ -18,3 +18,7 @@ SITE_DISPATCH_URL = "https://shine-plan-git-fix-home-course-10272f-121922144-qqc
 # Configure with: npx wrangler secret put DISPATCH_SECRET --config cron-worker/wrangler.toml
 [secrets]
 required = ["DISPATCH_SECRET"]
+
+# Store invocation and console logs in Cloudflare Observability for Cron troubleshooting.
+[observability]
+enabled = true
