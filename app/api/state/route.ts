@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { getD1 } from '@/db'
+import { dbQuery } from '@/db'
 import { json, requireDevice } from '@/lib/server/device'
 
 const stateSchema = z.object({
@@ -21,7 +21,7 @@ const stateSchema = z.object({
 type StateRow = {
   slots_json: string
   notes_json: string
-  reminder_enabled: number
+  reminder_enabled: boolean
   reminder_time: string
   timezone: string
   last_sent: string
@@ -31,14 +31,15 @@ type StateRow = {
 export async function GET(request: Request) {
   const device = await requireDevice(request)
   if (!device) return json({ error: '设备凭证无效' }, { status: 401 })
-  const row = await getD1().prepare(`SELECT slots_json, notes_json, reminder_enabled, reminder_time,
-    timezone, last_sent, updated_at FROM device_states WHERE device_id = ?`).bind(device.id).first<StateRow>()
+  const { rows } = await dbQuery<StateRow>(`SELECT slots_json, notes_json, reminder_enabled, reminder_time,
+    timezone, last_sent, updated_at FROM device_states WHERE device_id = $1`, [device.id])
+  const row = rows[0]
   if (!row) return json({ error: '未找到设备数据' }, { status: 404 })
   return json({
     hasState: row.updated_at > 0 && (row.slots_json !== '[]' || row.notes_json !== '[]'),
     slots: JSON.parse(row.slots_json),
     notes: JSON.parse(row.notes_json),
-    reminder: { enabled: Boolean(row.reminder_enabled), time: row.reminder_time, lastSent: row.last_sent },
+    reminder: { enabled: row.reminder_enabled, time: row.reminder_time, lastSent: row.last_sent },
     timezone: row.timezone,
     updatedAt: row.updated_at,
   })
@@ -53,8 +54,12 @@ export async function PUT(request: Request) {
   catch { return json({ error: '时区无效' }, { status: 400 }) }
   const { slots, notes, reminder, timezone } = parsed.data
   const now = Date.now()
-  await getD1().prepare(`UPDATE device_states SET slots_json = ?, notes_json = ?, reminder_enabled = ?,
-    reminder_time = ?, timezone = ?, updated_at = ? WHERE device_id = ?`)
-    .bind(JSON.stringify(slots), JSON.stringify(notes), reminder.enabled ? 1 : 0, reminder.time, timezone, now, device.id).run()
+  const { rowCount } = await dbQuery(`UPDATE device_states
+    SET slots_json = $1, notes_json = $2, reminder_enabled = $3,
+      reminder_time = $4, timezone = $5, updated_at = $6
+    WHERE device_id = $7`, [
+    JSON.stringify(slots), JSON.stringify(notes), reminder.enabled, reminder.time, timezone, now, device.id,
+  ])
+  if (!rowCount) return json({ error: '未找到设备数据' }, { status: 404 })
   return json({ saved: true, updatedAt: now })
 }

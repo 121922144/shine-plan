@@ -1,9 +1,24 @@
-name = "bag-plan-reminder-cron"
+# Dedicated Preview-only scheduler. Does not replace the original Cloudflare site.
+name = "shine-plan-preview-reminder-cron"
 main = "src/index.ts"
-compatibility_date = "2026-08-01"
+compatibility_date = "2026-10-01"
 
+# Cron is UTC. China time (Asia/Shanghai):
+# - 18:00-22:59: every five minutes, for precise evening reminders
+# - other hours: hourly, to support other selected times at lower Neon cost
+# Avoid querying Neon's Free database every five minutes around the clock.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 10-14 * * *", "0 0-9,15-23 * * *"]
 
+# Public Preview branch alias; NEVER use VAPID keys or DB connection strings here.
+# If Vercel's Visit URL differs, replace only the public base URL.
 [vars]
-SITE_DISPATCH_URL = "https://replace-after-sites-deploy.example"
+SITE_DISPATCH_URL = "https://shine-plan-git-fix-home-course-10272f-121922144-qqcoms-projects.vercel.app"
+
+# Configure with: npx wrangler secret put DISPATCH_SECRET --config cron-worker/wrangler.toml
+[secrets]
+required = ["DISPATCH_SECRET"]
+
+# Store invocation and console logs in Cloudflare Observability for Cron troubleshooting.
+[observability]
+enabled = true

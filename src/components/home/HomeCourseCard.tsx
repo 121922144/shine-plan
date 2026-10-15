@@ -6,11 +6,19 @@ const periodNames = ['第一节', '第二节', '第三节', '第四节', '第五
 
 export function HomeCourseCard({ slot, status, iconSrc }: { slot: Slot; status: string; iconSrc: string }) {
   return (
-    <li className="shine-course-card">
-      <span className="shine-period">{periodNames[slot.period - 1] ?? `第${slot.period}节`}</span>
-      <CourseIcon key={iconSrc} src={iconSrc} />
-      <div className="shine-course-info"><h3>{slot.name}</h3><p>{periodTime(slot.period)}</p></div>
-      <span className="shine-course-status" title="课程状态为示例，尚未接入签到数据">{status}<span className="visually-hidden">（示例）</span></span>
+    <li className="schedule-course-card">
+      <span className="schedule-period-badge">{periodNames[slot.period - 1] ?? `第${slot.period}节`}</span>
+      <span className="schedule-course-icon-wrap"><CourseIcon key={iconSrc} src={iconSrc} /></span>
+      <span className="schedule-course-copy">
+        <h3>{slot.name}</h3>
+        <small>{periodTime(slot.period)}</small>
+      </span>
+      <span
+        className={`schedule-course-status${status === '已上课' ? ' is-finished' : ''}`}
+        title="课程状态为示例，尚未接入签到数据"
+      >
+        {status}<span className="visually-hidden">（示例）</span>
+      </span>
     </li>
   )
 }
