@@ -7,6 +7,9 @@
 interface Env {
   SITE_DISPATCH_URL: string
   DISPATCH_SECRET: string
+  // Optional: Vercel's Deployment Protection bypass for an authenticated Preview.
+  // Set as a Cloudflare encrypted Worker Secret, never as a [vars] value.
+  VERCEL_AUTOMATION_BYPASS_SECRET?: string
 }
 
 type DispatchSummary = {
@@ -26,7 +29,12 @@ async function runDispatch(env: Env) {
   // Reject redirect responses rather than forwarding the Authorization header.
   const response = await fetch(url, {
     method: 'POST',
-    headers: { authorization: `Bearer ${env.DISPATCH_SECRET}` },
+    headers: {
+      authorization: `Bearer ${env.DISPATCH_SECRET}`,
+      ...(env.VERCEL_AUTOMATION_BYPASS_SECRET
+        ? { 'x-vercel-protection-bypass': env.VERCEL_AUTOMATION_BYPASS_SECRET }
+        : {}),
+    },
     redirect: 'manual',
     signal: AbortSignal.timeout(25_000),
   })
