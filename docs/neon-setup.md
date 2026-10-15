@@ -38,7 +38,7 @@ Vercel Functions 通过服务器端 `DATABASE_URL` 连接 Neon PostgreSQL；绝�
 
 - 只设置 VAPID 密钥并打开开关，**不等于每天到指定时间会自动弹出通知**；这还需要定时调度。
 - Vercel Hobby Cron 最多每天一次，且可能在指定小时内的任意时刻触发，**无法精确实现每台手机自定义的分钟级提醒时间**。
-- 在选择调度方案前不要配置或开放 `DISPATCH_SECRET`。后续会为 `/api/internal/reminders/dispatch` 设置安全调用和定时派发。
+- **定时方案已准备：** 使用独立 Cloudflare Worker 调用受 `DISPATCH_SECRET` 保护的 Preview `/api/internal/reminders/dispatch`，北京时间 18:00–22:59 每 5 分钟检查，其他时段每小时检查。部署步骤详见 [cron-worker/README.md](../cron-worker/README.md)。在账号所有者配置密钥并部署 Worker 前，自动发送尚未启用。
 - 重新生成并更换 VAPID 密钥会使旧的推送订阅失效，需要手机重新关闭、开启提醒。
 
 ### 已验证结果
