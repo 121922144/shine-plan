@@ -75,6 +75,28 @@ npx wrangler deploy --config cron-worker/wrangler.toml
 
 **提示：** 初次设置 `wrangler secret put` 时，Wrangler 可能提示创建 Worker，按提示确认即可。若 Secret 的设置顺序或 `required` 校验阻止部署，先按照 Wrangler 提示完成 Secret 设置，不要把明文密钥写入 `wrangler.toml`。
 
+### 如果 Cloudflare 日志报 `Reminder dispatch rejected: HTTP 302`
+
+HTTP 302 表示 Vercel 将定时器请求重定向了。**常见原因是 Preview 的 Vercel Authentication / Deployment Protection**；仅凭 HTTP 状态不能排除其他重定向原因。
+
+优先保持 Preview 保护，在 Vercel `shine-plan → Settings → Deployment Protection → Protection Bypass for Automation` 中生成一个用于 Cloudflare Cron 的 bypass secret。官方文档：https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation
+
+此 bypass secret 与 `DISPATCH_SECRET` 是**不同的两份密钥**：
+
+- `DISPATCH_SECRET`：Vercel API 验证派发任务身份；Cloudflare Worker 已存储。
+- `VERCEL_AUTOMATION_BYPASS_SECRET`：允许 Cloudflare 请求跨过 Vercel Preview 访问保护；仅存储到 Cloudflare Worker Secret。
+
+在**仓库根目录**执行（粘贴刚在 Vercel 生成的 bypass secret）：
+
+```powershell
+npx wrangler secret put VERCEL_AUTOMATION_BYPASS_SECRET --config cron-worker/wrangler.toml
+npx wrangler deploy --config cron-worker/wrangler.toml
+```
+
+Worker 若读取到该 secret，会在给 Vercel 的请求中添加 `x-vercel-protection-bypass` HTTP header，并继续发送原来的 `Authorization: Bearer DISPATCH_SECRET`。不需要将 bypass secret 加入 `wrangler.toml`、GitHub、URL 或 Vercel 自定义环境变量。
+
+如果仍返回 302，先只读检查 Vercel 的重定向目标，再判断是否因错误域名、未更新部署或访问保护导致；不要直接关闭整站访问保护。
+
 ### 3. 验证定时调度和推送
 
 1. 保持 iPhone「闪闪计划」设置 → 每日提醒处于开启状态，时间为 20:00。
