@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BellRing,
   CalendarDays,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { ScheduleCourseCard } from "../components/schedule/ScheduleCourseCard";
 import { NoCoursePanel } from "../components/schedule/NoCoursePanel";
-import { applyDayTimesToWeek, applyPeriodTimeToWeek, courseStatusAt } from "../coursePresentation";
+import { applyDayTimesToWeek, applyPeriodTimeToWeek, courseStatusAt, courseTimeLabel } from "../coursePresentation";
 import { useCourseClock } from "../useCourseClock";
 import type { ReminderSettings, Slot } from "../domain";
 
@@ -65,14 +65,24 @@ export function SchedulePage({
   onChange,
   onImport,
   onNotify,
+  importFocus,
 }: {
   slots: Slot[];
   onChange: (slots: Slot[]) => void;
   onImport: () => void;
   onNotify: (message: string) => void;
+  importFocus?: { day: number; serial: number } | null;
 }) {
   const [day, setDay] = useState(Math.min(5, Math.max(1, new Date().getDay())));
   const [weekOffset, setWeekOffset] = useState(0);
+  // Import saves retain the weekday being reviewed rather than silently
+  // switching to today's timetable (which may have no times configured).
+  useEffect(() => {
+    if (importFocus?.day && importFocus.day >= 1 && importFocus.day <= 5) {
+      setDay(importFocus.day);
+      setWeekOffset(0);
+    }
+  }, [importFocus]);
   const now = useCourseClock();
   const isSchoolDay = day >= 1 && day <= 5;
   const getSlot = (period: number) =>
@@ -144,6 +154,7 @@ export function SchedulePage({
   const selectedSlots = slots.filter(
     (slot) => slot.day === day && slot.name.trim().length > 0,
   );
+  const savedTimeCount = selectedSlots.filter((slot) => Boolean(courseTimeLabel(slot))).length;
   const isToday = sameDate(selectedDate, today);
   const selectedLabel = isToday ? "今天" : DAYS[day];
 
@@ -209,7 +220,9 @@ export function SchedulePage({
               {selectedLabel} · {selectedDate.getMonth() + 1}月
               {selectedDate.getDate()}日
             </h2>
-            <p>{isSchoolDay ? "课程名称和上课时间都可以修改" : "周末休息一下吧"}</p>
+            <p>{isSchoolDay
+              ? `课程和时间均可修改 · 本日已设时间 ${savedTimeCount}/${selectedSlots.length} 节`
+              : "周末休息一下吧"}</p>
           </div>
           <div className="schedule-section-actions">
             <span className="schedule-section-count">
