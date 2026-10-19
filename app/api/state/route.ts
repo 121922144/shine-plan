@@ -8,6 +8,15 @@ const stateSchema = z.object({
     day: z.number().int().min(1).max(5),
     period: z.number().int().min(1).max(8),
     name: z.string().trim().min(1).max(30),
+    // Time fields are optional to preserve existing timetables with no configured hours.
+    startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  }).superRefine((slot, context) => {
+    const start = slot.startTime
+    const end = slot.endTime
+    if (Boolean(start) !== Boolean(end) || (start && end && end <= start)) {
+      context.addIssue({ code: 'custom', path: ['endTime'], message: '课程开始与结束时间应成对填写，结束时间必须晚于开始时间' })
+    }
   })).max(80),
   notes: z.array(z.object({
     id: z.string().min(1).max(80),
