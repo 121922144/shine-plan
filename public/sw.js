@@ -1,4 +1,4 @@
-const CACHE = 'bag-plan-v17'
+const CACHE = 'bag-plan-v18'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-192x192.png', '/apple-touch-icon-180x180.png', '/backpack-mascot.png', '/home-hero-decorations.png?v=20260904-2']
 const IS_LOCAL_DEVELOPMENT = ['localhost', '127.0.0.1', '::1'].includes(self.location.hostname) && self.location.port === '5190'
 
@@ -41,13 +41,18 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE)
-      const cached = await cache.match(request) || await cache.match('/')
-      const network = updateCache(cache, request, await event.preloadResponse)
-      if (cached) {
-        event.waitUntil(network.catch(() => undefined))
-        return cached
+      // The schedule import/edit experience changes frequently. Network-first
+      // navigation prevents iPhone Safari from always displaying old cached
+      // UI after a successful Vercel deployment, while retaining offline use.
+      try {
+        const latest = await updateCache(cache, request, await event.preloadResponse)
+        if (latest?.ok) return latest
+        return (await cache.match(request)) || (await cache.match('/')) || latest
+      } catch {
+        const fallback = (await cache.match(request)) || (await cache.match('/'))
+        if (fallback) return fallback
+        return Response.error()
       }
-      return network
     })())
     return
   }
