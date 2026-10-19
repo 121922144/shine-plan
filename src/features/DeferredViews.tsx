@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock3,
   Cloud,
+  Copy,
   Download,
   RefreshCw,
   Sparkles,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import { ScheduleCourseCard } from "../components/schedule/ScheduleCourseCard";
 import { NoCoursePanel } from "../components/schedule/NoCoursePanel";
-import { courseStatusAt } from "../coursePresentation";
+import { applyDayTimesToWeek, applyPeriodTimeToWeek, courseStatusAt } from "../coursePresentation";
 import { useCourseClock } from "../useCourseClock";
 import type { ReminderSettings, Slot } from "../domain";
 
@@ -63,10 +64,12 @@ export function SchedulePage({
   slots,
   onChange,
   onImport,
+  onNotify,
 }: {
   slots: Slot[];
   onChange: (slots: Slot[]) => void;
   onImport: () => void;
+  onNotify: (message: string) => void;
 }) {
   const [day, setDay] = useState(Math.min(5, Math.max(1, new Date().getDay())));
   const [weekOffset, setWeekOffset] = useState(0);
@@ -93,6 +96,41 @@ export function SchedulePage({
     const current = getSlot(period);
     if (!current) return;
     onChange(slots.map((slot) => slot.id === current.id ? { ...slot, startTime, endTime } : slot));
+  };
+  const weekdayTimePreview = applyDayTimesToWeek(slots, day);
+  const applySingleCourseTimeToWeek = (period: number, startTime: string, endTime: string): boolean => {
+    if (!isSchoolDay || !getSlot(period)) return false;
+    const matchingCourses = slots.filter((slot) =>
+      slot.day !== day && slot.day >= 1 && slot.day <= 5 &&
+      slot.period === period && slot.name.trim(),
+    );
+    if (!matchingCourses.length) {
+      onNotify("其他工作日没有同节次课程，未修改课表");
+      return false;
+    }
+    const { slots: updated, affected } = applyPeriodTimeToWeek(slots, day, period, { startTime, endTime });
+    if (!window.confirm(
+      `将${DAYS[day]}第${period}节的 ${startTime} - ${endTime} 应用到其他工作日的同节次课程吗？\n` +
+      `共匹配 ${matchingCourses.length} 节课，其中 ${affected} 节时间将改变。\n` +
+      "只复制时间，不修改课程名称，也不会新增课程。",
+    )) return false;
+    if (updated !== slots) onChange(updated);
+    onNotify(affected ? `已将第${period}节时间应用到其他 ${affected} 节课程` : "各工作日同节次时间已一致");
+    return true;
+  };
+  const applyWholeDayTimeToWeek = () => {
+    if (!isSchoolDay || !weekdayTimePreview.periods) return;
+    if (!weekdayTimePreview.affected) {
+      onNotify("其他工作日已有课程的对应节次时间一致，或没有对应课程");
+      return;
+    }
+    if (!window.confirm(
+      `将${DAYS[day]}已填写时间的 ${weekdayTimePreview.periods} 个节次应用到周一至周五的其他天吗？\n` +
+      `会覆盖其他工作日 ${weekdayTimePreview.affected} 节课程的时间。\n` +
+      "未填写时间的节次不处理；课程名称不变，也不会新增课程。",
+    )) return;
+    onChange(weekdayTimePreview.slots);
+    onNotify(`已将${DAYS[day]}时间应用到其他 ${weekdayTimePreview.affected} 节课程`);
   };
   const today = startOfDay(now);
   const weekStart = new Date(today);
@@ -188,6 +226,22 @@ export function SchedulePage({
           </div>
         </div>
 
+        {isSchoolDay && selectedSlots.length > 0 && (
+          <div className="schedule-time-batch">
+            <span>只同步时间，课程名称不变</span>
+            <button
+              className="schedule-time-batch-button"
+              type="button"
+              disabled={!weekdayTimePreview.periods}
+              onClick={applyWholeDayTimeToWeek}
+              title={weekdayTimePreview.periods ? "按节次同步到其它工作日已有课程" : "请先为当天至少一节课设置上课时间"}
+            >
+              <Copy size={13} />
+              本日时间应用到每天
+            </button>
+          </div>
+        )}
+
         <div className="schedule-course-list">
           {selectedSlots.length === 0 ? (
             <NoCoursePanel isWeekend={!isSchoolDay} isToday={isToday} />
@@ -203,6 +257,7 @@ export function SchedulePage({
                   readOnly={!isSchoolDay}
                   onChange={(name) => update(period, name)}
                   onTimeChange={(startTime, endTime) => updateTime(period, startTime, endTime)}
+                  onApplyToWeek={(startTime, endTime) => applySingleCourseTimeToWeek(period, startTime, endTime)}
                 />
               );
             })
