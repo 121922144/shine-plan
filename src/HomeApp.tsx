@@ -300,7 +300,7 @@ export default function HomeApp() {
         <div className="page-content" ref={pageContentRef}>
           {!booted ? <HomeSkeleton /> : tab === 'home' ? <SmartHome allSlots={slots} selectedDay={selectedDay} onSelectedDay={setSelectedDay} onImport={() => setImportOpen(true)} /> : (
             <Suspense fallback={tab === 'schedule' ? <ScheduleSkeleton /> : <PanelSkeleton />}>
-              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} />}
+              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} onNotify={showToast} />}
               {tab === 'settings' && <SettingsPage reminder={reminder} onReminderChange={setReminder} onEnable={enableReminder} onDisable={disableReminder} onCalendar={downloadCalendar} onInstall={installApp} cloudStatus={cloudStatus} pushStatus={pushStatus} isIos={isIos} isStandalone={isStandalone} onReset={() => { if (!window.confirm('确定清空课程和日期提醒吗？此操作无法撤销。')) return; setSlots([]); setNotes([]); showToast('数据已清空') }} />}
             </Suspense>
           )}
