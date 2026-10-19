@@ -4214,15 +4214,16 @@ input:focus-visible {
 }
 
 .course-time-inputs {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
 }
 
 .course-time-field {
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   min-width: 0;
   gap: 4px;
   color: #7192a8;
@@ -4235,7 +4236,7 @@ input:focus-visible {
 }
 
 .course-time-field input[type="time"] {
-  width: 100px;
+  width: 100%;
   min-width: 0;
   height: 32px;
   padding: 3px 6px;
@@ -4250,8 +4251,7 @@ input:focus-visible {
 }
 
 .course-time-separator {
-  color: #9aafba;
-  font-size: 12px;
+  display: none;
 }
 
 .course-time-clear {
@@ -4327,7 +4327,7 @@ input:focus-visible {
 }
 
 .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
-  width: 94px;
+  width: 100%;
   height: 32px;
   padding: 3px 4px;
   border: 1px solid #d7e8f0;
@@ -4352,7 +4352,7 @@ input:focus-visible {
 @media (max-width: 380px) {
   .course-time-field input[type="time"],
   .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
-    width: 84px;
+    width: 100%;
     font-size: 11px;
     padding-inline: 2px;
   }
