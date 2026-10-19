@@ -1,5 +1,8 @@
 :root {
   --app-page-bg: #fffdf8;
+  /* Shared ordinary form-control sizing. Decorative circular/pill controls retain their shapes. */
+  --app-control-height: 32px;
+  --app-control-radius: 10px;
   --primary: #6547f5;
   --primary-deep: #4431d8;
   --blue: #3e72f6;
@@ -44,6 +47,7 @@ input {
 
 button {
   -webkit-tap-highlight-color: transparent;
+  border-radius: var(--app-control-radius);
 }
 
 button:focus:not(:focus-visible),
@@ -4214,17 +4218,25 @@ input:focus-visible {
 }
 
 .course-time-inputs {
+  width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  /* Without a clear button, both inputs use the full row. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: 8px;
 }
 
+.course-time-inputs.has-clear {
+  /* 56px is sufficient for “清空”; share the rest evenly between the time pickers. */
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 56px;
+}
+
 .course-time-field {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  width: 100%;
   min-width: 0;
+  display: grid;
+  grid-template-rows: 18px var(--app-control-height);
+  align-items: stretch;
   gap: 4px;
   color: #7192a8;
   font-size: 11px;
@@ -4232,20 +4244,24 @@ input:focus-visible {
 }
 
 .course-time-field > span {
-  flex: 0 0 auto;
+  line-height: 18px;
 }
 
 .course-time-field input[type="time"] {
+  display: block;
   width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 3px 6px;
+  max-width: none;
+  height: var(--app-control-height);
+  margin: 0;
+  padding: 0 6px;
+  box-sizing: border-box;
   border: 1px solid #cde4ef;
-  border-radius: 10px;
+  border-radius: var(--app-control-radius);
   outline-offset: 1px;
   background: #f4faff;
   color: #285a80;
-  font-size: 12px;
+  font-size: 16px; /* Prevent focus-zoom on iPhone Safari. */
   font-weight: 550;
   font-variant-numeric: tabular-nums;
 }
@@ -4255,13 +4271,19 @@ input:focus-visible {
 }
 
 .course-time-clear {
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
+  justify-self: stretch;
+  align-self: end;
+  width: 100%;
+  height: var(--app-control-height);
+  min-height: var(--app-control-height);
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid #e0e9ee;
+  border-radius: var(--app-control-radius);
   background: #f3f6f8;
   color: #7b8fa2;
-  font-size: 11px;
+  font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -4281,10 +4303,10 @@ input:focus-visible {
 }
 
 .schedule-time-editor-actions button {
-  min-height: 32px;
+  min-height: var(--app-control-height);
   padding: 5px 12px;
   border: 1px solid #d8e7ef;
-  border-radius: 10px;
+  border-radius: var(--app-control-radius);
   background: #fff;
   color: #608ba6;
   font-size: 12px;
@@ -4328,12 +4350,12 @@ input:focus-visible {
 
 .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
   width: 100%;
-  height: 32px;
-  padding: 3px 4px;
+  height: var(--app-control-height);
+  padding: 0 4px;
   border: 1px solid #d7e8f0;
-  border-radius: 10px;
+  border-radius: var(--app-control-radius);
   background: #f5fbff;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 550;
 }
 
@@ -4353,11 +4375,35 @@ input:focus-visible {
   .course-time-field input[type="time"],
   .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
     width: 100%;
-    font-size: 11px;
     padding-inline: 2px;
   }
 
   .course-time-inputs {
     gap: 4px;
   }
+}
+
+/* At very narrow widths, preserve usable time pickers; clear sits below instead of overlapping. */
+@media (max-width: 340px) {
+  .course-time-inputs.has-clear {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .course-time-clear {
+    grid-column: 2;
+    justify-self: end;
+    width: 64px;
+  }
+}
+
+
+/* Consistent rounded action buttons; keep deliberately circular icon buttons,
+   date selectors and rounded status badges unchanged. */
+.primary-button,
+.secondary-button,
+.small-button,
+.schedule-reimport,
+.schedule-time-editor-actions button,
+.course-time-clear {
+  border-radius: var(--app-control-radius);
 }
