@@ -7,7 +7,8 @@ import { DailyGoalsCard } from './components/home/DailyGoalsCard'
 import { HomeCourseCard } from './components/home/HomeCourseCard'
 import { resolveCourseIcon } from './features/home/courseIconMap'
 import { StarRewardBanner } from './components/home/StarRewardBanner'
-import { mockCourseStatuses } from './features/home/homeMock'
+import { courseStatusAt } from './coursePresentation'
+import { useCourseClock } from './useCourseClock'
 import { defaultHomeDay, homeTarget, type DateNote, type HomeDay, type ReminderSettings, type Slot } from './domain'
 
 const loadDeferredViews = () => import('./features/DeferredViews')
@@ -114,7 +115,7 @@ function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
   onSelectedDay: (day: HomeDay) => void
   onImport: () => void
 }) {
-  const now = new Date()
+  const now = useCourseClock()
   const target = homeTarget(now, selectedDay)
   const slots = allSlots.filter((slot) => slot.day === target.weekday).sort((a, b) => a.period - b.period)
   const [prepared, setPrepared] = useState(false)
@@ -144,7 +145,7 @@ function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
             <span className="shine-course-empty-privacy"><Sparkles size={13} />图片只在你的设备上识别，不会上传保存</span>
           </article>
         )) : (
-          <><ul className="shine-course-list schedule-course-list">{slots.map((slot, index) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={mockCourseStatuses[index % mockCourseStatuses.length]} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>固定作息时间 · 状态为示例</span></p></>
+          <><ul className="shine-course-list schedule-course-list">{slots.map((slot) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={courseStatusAt(slot, target.date, now)} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>时间可在课表页修改</span></p></>
         )}
 
         <StarRewardBanner />
