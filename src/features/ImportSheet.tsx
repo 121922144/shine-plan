@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, ImagePlus, ListChecks, LoaderCircle, Plus, Sparkles, X } from 'lucide-react'
 import type { Slot } from '../domain'
+import { courseTimeError } from '../coursePresentation'
+import { CourseTimeFields } from '../components/schedule/CourseTimeFields'
 
 type ImportStep = 'pick' | 'reading' | 'review'
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -913,6 +915,27 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     if (existing) setDraft(name.trim() ? draft.map((slot) => slot.id === existing.id ? { ...slot, name } : slot) : draft.filter((slot) => slot.id !== existing.id))
     else if (name.trim()) setDraft([...draft, { id: uid(), day, period, name }])
   }
+  const updateDraftTime = (period: number, field: 'startTime' | 'endTime', value: string) => {
+    setDraft((current) => current.map((slot) =>
+      slot.day === day && slot.period === period
+        ? { ...slot, [field]: value || undefined }
+        : slot,
+    ))
+  }
+  const clearDraftTime = (period: number) => {
+    setDraft((current) => current.map((slot) =>
+      slot.day === day && slot.period === period
+        ? { ...slot, startTime: undefined, endTime: undefined }
+        : slot,
+    ))
+  }
+  // When re-importing the timetable, keep manually entered hours for the same weekday/period.
+  // Parents can still edit or clear them in the review step before replacing the old schedule.
+  const retainExistingTimes = (recognized: Slot[]): Slot[] => recognized.map((slot) => {
+    const existing = currentSlots.find((saved) => saved.day === slot.day && saved.period === slot.period)
+    return existing ? { ...slot, startTime: existing.startTime, endTime: existing.endTime } : slot
+  })
+  const invalidTimeCount = draft.filter((slot) => Boolean(courseTimeError(slot))).length
   const recognize = async () => {
     if (!file) return
     setStep('reading')
@@ -969,7 +992,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         const result = await worker.recognize(file, { rotateAuto: true }, { blocks: true, text: true })
         inferred = inferSlotsFromOcr(result.data)
       }
-      setDraft(inferred.slots)
+      setDraft(retainExistingTimes(inferred.slots))
       setCandidates(inferred.candidates)
       setOcrText(inferred.rawText)
       setStep('review')
@@ -992,7 +1015,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
       [4, 1, '语文'], [4, 2, '科学'], [4, 4, '英语'], [4, 6, '体育'],
       [5, 1, '数学'], [5, 2, '语文'], [5, 3, '英语'], [5, 5, '班会'],
     ]
-    setDraft(sample.map(([itemDay, period, name]) => ({ id: uid(), day: itemDay, period, name })))
+    setDraft(retainExistingTimes(sample.map(([itemDay, period, name]) => ({ id: uid(), day: itemDay, period, name }))))
     setCandidates(['语文', '数学', '英语', '科学', '体育', '音乐', '美术', '班会'])
     setOcrText('语文 数学 英语 科学 体育 音乐 美术 班会（示例数据）')
     setStep('review')
@@ -1041,20 +1064,44 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
               <ListChecks size={18} />
               <p>
                 <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
-                <span>{draft.length ? '请按星期检查，点错的地方可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
+                <span>{draft.length ? '请核对课程和上课时间。时间选填，留空时不会显示时间及已上课状态。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
               </p>
             </div>
             <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
             <div className="period-list compact-list">{PERIODS.map((period) => {
               const slot = draft.find((item) => item.day === day && item.period === period)
-              return <label className="period-row" key={`${day}-${period}`}><span>{period}</span><input value={slot?.name ?? ''} onChange={(event) => updateDraft(period, event.target.value)} placeholder="无课程" /></label>
+              return (
+                <div className="period-row" key={`${day}-${period}`}>
+                  <span>{period}</span>
+                  <div className="import-course-edit">
+                    <input
+                      className="import-course-name"
+                      value={slot?.name ?? ''}
+                      onChange={(event) => updateDraft(period, event.target.value)}
+                      placeholder="无课程"
+                      aria-label={`${DAY_NAMES[day]}第${period}节课程名称`}
+                    />
+                    {slot && (
+                      <CourseTimeFields
+                        period={period}
+                        startTime={slot.startTime}
+                        endTime={slot.endTime}
+                        onStartChange={(value) => updateDraftTime(period, 'startTime', value)}
+                        onEndChange={(value) => updateDraftTime(period, 'endTime', value)}
+                        onClear={() => clearDraftTime(period)}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
             })}</div>
             {candidates.length > 0 && <div className="candidate-box"><p><strong>快速补充课程</strong><span>点击添加到{DAY_NAMES[day]}</span></p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
             <details className="ocr-details">
               <summary>查看识别原文（{ocrText.length} 个字）</summary>
               <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
             </details>
-            <button className="primary-button wide" disabled={!draft.length} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
+            {invalidTimeCount > 0 && <p className="import-time-error" role="status">有 {invalidTimeCount} 节课的时间未填完整或结束时间早于开始时间，请修正或清空后再保存。</p>}
+            <button className="primary-button wide" disabled={!draft.length || invalidTimeCount > 0} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
           </div>
         )}
       </div>
