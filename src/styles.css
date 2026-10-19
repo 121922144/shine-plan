@@ -4529,3 +4529,69 @@ input:focus-visible {
     padding-inline: 10px;
   }
 }
+
+
+/* Timetable import review: always-visible Save footer, so edited class times
+   cannot be mistaken for saved data while the eight rows scroll above it. */
+.sheet.import-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 94dvh;
+}
+
+.import-sheet .sheet-handle,
+.import-sheet .sheet-header {
+  flex: 0 0 auto;
+}
+
+.import-sheet .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.import-sheet .import-save-footer {
+  flex: 0 0 auto;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid #dceaf1;
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 -8px 18px rgba(70, 119, 149, .065);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.import-save-hint {
+  margin-bottom: 8px;
+  color: #6c91a9;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.import-sheet .import-save-footer .primary-button {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 9999px;
+}
+
+/* "Clear" shares the same 12px corner treatment, outline and surface as the
+   neighboring time inputs, rather than the global pill-button styling. */
+.course-time-inputs .course-time-clear {
+  border: 1px solid #cde4ef;
+  border-radius: 12px;
+  background: #f4faff;
+  color: #6389a1;
+}
+
+.import-sheet .course-time-inputs .course-time-clear {
+  border-color: #d7e8f0;
+  background: #f5fbff;
+}
+
+@media (max-width: 380px) {
+  .import-sheet .import-save-footer {
+    padding-inline: 16px;
+  }
+}
