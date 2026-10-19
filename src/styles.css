@@ -4595,3 +4595,15 @@ input:focus-visible {
     padding-inline: 16px;
   }
 }
+
+/* Explicit error when local save succeeds but cloud read-back is not confirmed. */
+.import-sheet .import-save-error {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid #f3d5be;
+  border-radius: 12px;
+  background: #fff8f1;
+  color: #a96645;
+  font-size: 12px;
+  line-height: 1.55;
+}
