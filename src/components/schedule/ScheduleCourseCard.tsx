@@ -14,6 +14,7 @@ export function ScheduleCourseCard({
   status,
   onChange,
   onTimeChange,
+  onApplyToWeek,
   readOnly = false,
 }: {
   period: number
@@ -21,6 +22,7 @@ export function ScheduleCourseCard({
   status: CourseStatus | '休息' | null
   onChange: (name: string) => void
   onTimeChange: (startTime?: string, endTime?: string) => void
+  onApplyToWeek: (startTime: string, endTime: string) => boolean
   readOnly?: boolean
 }) {
   const empty = !slot
@@ -88,6 +90,16 @@ export function ScheduleCourseCard({
             <button type="button" onClick={() => setEditingTime(false)}>取消</button>
             <button type="button" className="is-primary" disabled={Boolean(timeError)} onClick={saveTime}>
               保存时间
+            </button>
+            <button
+              type="button"
+              className="is-apply-week"
+              disabled={Boolean(timeError) || !startTime || !endTime}
+              onClick={() => {
+                if (onApplyToWeek(startTime, endTime)) setEditingTime(false)
+              }}
+            >
+              应用到每天
             </button>
           </div>
         </div>
