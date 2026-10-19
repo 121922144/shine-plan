@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { ScheduleCourseCard } from "../components/schedule/ScheduleCourseCard";
 import { NoCoursePanel } from "../components/schedule/NoCoursePanel";
-import { periodTime } from "../coursePresentation";
+import { courseStatusAt } from "../coursePresentation";
+import { useCourseClock } from "../useCourseClock";
 import type { ReminderSettings, Slot } from "../domain";
 
 export type { ReminderSettings, Slot } from "../domain";
@@ -35,24 +36,6 @@ function sameDate(left: Date, right: Date) {
     left.getMonth() === right.getMonth() &&
     left.getDate() === right.getDate()
   );
-}
-
-function courseStatus(
-  date: Date,
-  period: number,
-  hasCourse: boolean,
-): "已上课" | "待上课" | "休息" {
-  if (!hasCourse) return "休息";
-  const today = startOfDay(new Date());
-  const selected = startOfDay(date);
-  if (selected < today) return "已上课";
-  if (selected > today) return "待上课";
-  const endTime = periodTime(period).split(" - ")[1];
-  if (!endTime) return "待上课";
-  const [hour, minute] = endTime.split(":").map(Number);
-  const end = new Date(date);
-  end.setHours(hour, minute, 0, 0);
-  return new Date() > end ? "已上课" : "待上课";
 }
 
 function Switch({
@@ -87,6 +70,7 @@ export function SchedulePage({
 }) {
   const [day, setDay] = useState(Math.min(5, Math.max(1, new Date().getDay())));
   const [weekOffset, setWeekOffset] = useState(0);
+  const now = useCourseClock();
   const isSchoolDay = day >= 1 && day <= 5;
   const getSlot = (period: number) =>
     slots.find((slot) => slot.day === day && slot.period === period);
@@ -104,7 +88,13 @@ export function SchedulePage({
     else if (name.trim())
       onChange([...slots, { id: uid(), day, period, name }]);
   };
-  const today = startOfDay(new Date());
+  const updateTime = (period: number, startTime?: string, endTime?: string) => {
+    if (!isSchoolDay) return;
+    const current = getSlot(period);
+    if (!current) return;
+    onChange(slots.map((slot) => slot.id === current.id ? { ...slot, startTime, endTime } : slot));
+  };
+  const today = startOfDay(now);
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - today.getDay() + weekOffset * 7);
   const weekDates = WEEK_DAYS.map((_, index) => {
@@ -181,7 +171,7 @@ export function SchedulePage({
               {selectedLabel} · {selectedDate.getMonth() + 1}月
               {selectedDate.getDate()}日
             </h2>
-            <p>{isSchoolDay ? "课程名称可以直接修改" : "周末休息一下吧"}</p>
+            <p>{isSchoolDay ? "课程名称和上课时间都可以修改" : "周末休息一下吧"}</p>
           </div>
           <div className="schedule-section-actions">
             <span className="schedule-section-count">
@@ -209,9 +199,10 @@ export function SchedulePage({
                   key={`${day}-${period}`}
                   period={period}
                   slot={slot}
-                  status={courseStatus(selectedDate, period, Boolean(slot))}
+                  status={slot ? courseStatusAt(slot, selectedDate, now) : "休息"}
                   readOnly={!isSchoolDay}
                   onChange={(name) => update(period, name)}
+                  onTimeChange={(startTime, endTime) => updateTime(period, startTime, endTime)}
                 />
               );
             })
