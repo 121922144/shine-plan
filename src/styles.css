@@ -4454,3 +4454,78 @@ input:focus-visible {
 .schedule-month-row > button {
   border-radius: 50%;
 }
+
+
+/* Weekday time reuse actions: synchronize hours only, never course names. */
+.schedule-time-batch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 2px 12px;
+  padding: 8px 12px;
+  border: 1px solid #e4eff6;
+  border-radius: 14px;
+  background: #f4faff;
+}
+
+.schedule-time-batch > span {
+  color: #7794a8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.schedule-time-batch-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--app-control-height);
+  padding: 0 12px;
+  border: 1px solid #b9dff1;
+  border-radius: var(--app-control-radius);
+  background: #fff;
+  color: #3086b6;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.schedule-time-batch-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.schedule-time-editor-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.schedule-time-editor-actions .is-apply-week {
+  border-color: #abd9ed;
+  border-radius: var(--app-control-radius);
+  background: #e8f7ff;
+  color: #247ea9;
+  font-weight: 650;
+}
+
+.schedule-time-editor-actions .is-apply-week:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 380px) {
+  .schedule-time-batch {
+    justify-content: flex-end;
+  }
+
+  .schedule-time-batch > span {
+    flex: 1 1 100%;
+  }
+
+  .schedule-time-editor-actions button {
+    padding-inline: 10px;
+  }
+}
