@@ -936,6 +936,9 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     return existing ? { ...slot, startTime: existing.startTime, endTime: existing.endTime } : slot
   })
   const invalidTimeCount = draft.filter((slot) => Boolean(courseTimeError(slot))).length
+  const timedCourseCount = draft.filter((slot) => Boolean(slot.startTime && slot.endTime && !courseTimeError(slot))).length
+  const confirmLeaveReview = () => step !== 'review' || !draft.length ||
+    window.confirm('课程和上课时间还未保存。确定放弃修改并离开吗？')
   const recognize = async () => {
     if (!file) return
     setStep('reading')
@@ -1029,9 +1032,9 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
       <div className="sheet import-sheet">
         <div className="sheet-handle" />
         <div className="sheet-header">
-          {step !== 'pick' ? <button className="icon-button" onClick={() => setStep('pick')}><ChevronLeft size={21} /></button> : <div />}
+          {step !== 'pick' ? <button className="icon-button" onClick={() => { if (confirmLeaveReview()) setStep('pick') }}><ChevronLeft size={21} /></button> : <div />}
           <div className="sheet-heading"><h2>{step === 'review' ? '校对课程表' : '上传课程表'}</h2>{step === 'pick' && <p className="sheet-subtitle">拍下课程表，闪闪来帮你整理呀</p>}</div>
-          <button className="icon-button" onClick={onClose}><X size={21} /></button>
+          <button className="icon-button" onClick={() => { if (confirmLeaveReview()) onClose() }}><X size={21} /></button>
         </div>
         {step === 'pick' && (
           <div className="sheet-body">
@@ -1064,7 +1067,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
               <ListChecks size={18} />
               <p>
                 <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
-                <span>{draft.length ? '请核对课程和上课时间。时间选填，留空时不会显示时间及已上课状态。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
+                <span>{draft.length ? '请核对课程和上课时间。时间选填；修改后请点击底部“保存课程表”，才会在课表页生效。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
               </p>
             </div>
             <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
@@ -1100,8 +1103,23 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
               <summary>查看识别原文（{ocrText.length} 个字）</summary>
               <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
             </details>
-            {invalidTimeCount > 0 && <p className="import-time-error" role="status">有 {invalidTimeCount} 节课的时间未填完整或结束时间早于开始时间，请修正或清空后再保存。</p>}
-            <button className="primary-button wide" disabled={!draft.length || invalidTimeCount > 0} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
+          </div>
+        )}
+        {step === 'review' && (
+          <div className="import-save-footer">
+            <div className="import-save-hint" role="status">
+              {invalidTimeCount > 0
+                ? `有 ${invalidTimeCount} 节课时间未填完整或无效，请先修正或清空`
+                : `共 ${draft.length} 节课 · ${timedCourseCount} 节已设置时间 · 保存后生效`}
+            </div>
+            <button
+              type="button"
+              className="primary-button wide"
+              disabled={!draft.length || invalidTimeCount > 0}
+              onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}
+            >
+              保存课程表
+            </button>
           </div>
         )}
       </div>
