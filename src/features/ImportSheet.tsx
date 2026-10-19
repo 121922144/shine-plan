@@ -889,7 +889,11 @@ function inferSlotsFromOcr(data: any): { slots: Slot[]; candidates: string[]; ra
   }
 }
 
-export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: Slot[]; onClose: () => void; onSave: (slots: Slot[], mode: 'replace' | 'append') => void }) {
+export function ImportSheet({ currentSlots, onClose, onSave }: {
+  currentSlots: Slot[]
+  onClose: () => void
+  onSave: (slots: Slot[], mode: 'replace' | 'append', selectedDay: number) => Promise<void>
+}) {
   const [step, setStep] = useState<ImportStep>('pick')
   const [preview, setPreview] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -900,6 +904,8 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
   const [ocrText, setOcrText] = useState('')
   const [day, setDay] = useState(1)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
@@ -936,9 +942,21 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     return existing ? { ...slot, startTime: existing.startTime, endTime: existing.endTime } : slot
   })
   const invalidTimeCount = draft.filter((slot) => Boolean(courseTimeError(slot))).length
+  const saveDraft = async () => {
+    if (saving || !draft.length || invalidTimeCount) return
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onSave(draft, currentSlots.length ? 'replace' : 'append', day)
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : '保存出现异常，请稍后再试')
+    } finally {
+      setSaving(false)
+    }
+  }
   const timedCourseCount = draft.filter((slot) => Boolean(slot.startTime && slot.endTime && !courseTimeError(slot))).length
-  const confirmLeaveReview = () => step !== 'review' || !draft.length ||
-    window.confirm('课程和上课时间还未保存。确定放弃修改并离开吗？')
+  const confirmLeaveReview = () => !saving && (step !== 'review' || !draft.length ||
+    window.confirm('课程和上课时间还未保存。确定放弃修改并离开吗？'))
   const recognize = async () => {
     if (!file) return
     setStep('reading')
@@ -1112,13 +1130,14 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
                 ? `有 ${invalidTimeCount} 节课时间未填完整或无效，请先修正或清空`
                 : `共 ${draft.length} 节课 · ${timedCourseCount} 节已设置时间 · 保存后生效`}
             </div>
+            {saveError && <p className="import-save-error" role="alert">{saveError}</p>}
             <button
               type="button"
               className="primary-button wide"
-              disabled={!draft.length || invalidTimeCount > 0}
-              onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}
+              disabled={saving || !draft.length || invalidTimeCount > 0}
+              onClick={() => void saveDraft()}
             >
-              保存课程表
+              {saving ? '正在保存课程与时间…' : '保存课程表'}
             </button>
           </div>
         )}
