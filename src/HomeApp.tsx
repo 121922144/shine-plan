@@ -74,6 +74,17 @@ async function apiRequest<T>(path: string, token = '', init: RequestInit = {}): 
   return data
 }
 
+function matchesSavedClassTimes(expected: Slot[], received: Slot[]) {
+  if (expected.length !== received.length) return false
+  const saved = new Map(received.map((slot) => [`${slot.day}:${slot.period}`, slot]))
+  return expected.every((slot) => {
+    const actual = saved.get(`${slot.day}:${slot.period}`)
+    return actual?.name === slot.name &&
+      (actual?.startTime || '') === (slot.startTime || '') &&
+      (actual?.endTime || '') === (slot.endTime || '')
+  })
+}
+
 function urlBase64ToArrayBuffer(value: string) {
   const padding = '='.repeat((4 - value.length % 4) % 4)
   const base64 = (value + padding).replaceAll('-', '+').replaceAll('_', '/')
@@ -163,6 +174,7 @@ export default function HomeApp() {
   const [notes, setNotes] = useState<DateNote[]>([])
   const [reminder, setReminder] = useState<ReminderSettings>(DEFAULT_REMINDER)
   const [importOpen, setImportOpen] = useState(false)
+  const [importFocus, setImportFocus] = useState<{ day: number; serial: number } | null>(null)
   const [toast, setToast] = useState('')
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [cloudReady, setCloudReady] = useState(false)
@@ -322,26 +334,58 @@ export default function HomeApp() {
         <div className="page-content" ref={pageContentRef}>
           {!booted ? <HomeSkeleton /> : tab === 'home' ? <SmartHome allSlots={slots} selectedDay={selectedDay} onSelectedDay={setSelectedDay} onImport={() => setImportOpen(true)} /> : (
             <Suspense fallback={tab === 'schedule' ? <ScheduleSkeleton /> : <PanelSkeleton />}>
-              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} onNotify={showToast} />}
+              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} onNotify={showToast} importFocus={importFocus} />}
               {tab === 'settings' && <SettingsPage reminder={reminder} onReminderChange={setReminder} onEnable={enableReminder} onDisable={disableReminder} onCalendar={downloadCalendar} onInstall={installApp} cloudStatus={cloudStatus} pushStatus={pushStatus} isIos={isIos} isStandalone={isStandalone} onReset={() => { if (!window.confirm('确定清空课程和日期提醒吗？此操作无法撤销。')) return; setSlots([]); setNotes([]); showToast('数据已清空') }} />}
             </Suspense>
           )}
         </div>
         <nav className="bottom-nav" aria-label="主导航"><NavButton active={tab === 'home'} label="首页" icon={<Home />} onClick={() => selectTab('home')} /><NavButton active={tab === 'schedule'} label="课表" icon={<CalendarDays />} onClick={() => selectTab('schedule')} /><NavButton active={tab === 'settings'} label="设置" icon={<Settings />} onClick={() => selectTab('settings')} /></nav>
       </main>
-      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => {
+      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={async (nextSlots, mode, editedDay) => {
         const savedSlots = mode === 'replace' ? nextSlots : [...slots, ...nextSlots]
-        // Save the complete draft (including startTime/endTime) to phone storage immediately.
-        // Cloud synchronization is performed by the existing debounced state effect.
+        const serialized = JSON.stringify(savedSlots)
+        const timedCount = savedSlots.filter((slot) => Boolean(slot.startTime && slot.endTime)).length
+
+        // First commit the exact draft to React and persistent local storage.
+        // Retain the pending marker until the cloud has confirmed all class hours.
         try {
-          const serialized = JSON.stringify(savedSlots)
           localStorage.setItem(STORAGE.slots, serialized)
           localStorage.setItem(STORAGE.pendingImport, serialized)
-        } catch { /* React state still retains the edited timetable. */ }
+        } catch { /* Keep the React state even when storage is restricted. */ }
         setSlots(savedSlots)
+
+        if (cloudReady) {
+          setCloudStatus('正在同步课程时间…')
+          try {
+            const token = await ensureDeviceToken()
+            await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({
+              slots: savedSlots, notes,
+              reminder: { enabled: reminder.enabled, time: reminder.time },
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+            }) })
+            const verified = await apiRequest<CloudState>('/api/state', token)
+            if (!matchesSavedClassTimes(savedSlots, verified.slots)) {
+              throw new Error('云端读取的课程时间与刚才保存的不一致')
+            }
+            if (localStorage.getItem(STORAGE.pendingImport) === serialized) {
+              localStorage.removeItem(STORAGE.pendingImport)
+            }
+            setCloudStatus('已同步到云端')
+          } catch (reason) {
+            setCloudStatus('课程时间尚未确认云端同步')
+            const detail = reason instanceof Error ? reason.message : '网络连接异常'
+            throw new Error(`已在手机保存修改，但云端未确认：${detail}。请保持页面打开并重试保存。`)
+          }
+        }
+
+        // Show exactly the weekday whose time was edited. Otherwise a Monday
+        // import can appear empty immediately after opening Tuesday's timetable.
+        setImportFocus({ day: editedDay, serial: Date.now() })
         setImportOpen(false)
         selectTab('schedule')
-        showToast(cloudReady ? '课程和时间已保存，正在同步云端…' : '课程和时间已保存到手机，等待云端同步')
+        showToast(cloudReady
+          ? `已确认保存 ${savedSlots.length} 节课程，其中 ${timedCount} 节有时间`
+          : `已保存到手机：${timedCount} 节有时间，云端待同步`)
       }} /></Suspense>}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
