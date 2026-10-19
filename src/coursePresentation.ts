@@ -48,6 +48,62 @@ export function courseStatusAt(slot: Slot, date: Date, now = new Date()): Course
   return now.getTime() >= classEnd.getTime() ? '已上课' : '待上课'
 }
 
+
+/**
+ * Timetable days are Monday–Friday. Copy only clock times across EXISTING
+ * classes with the same period. Never overwrite names, add slots or touch
+ * weekend dates. A source with no valid pair of times never clears targets.
+ */
+export function applyPeriodTimeToWeek(
+  slots: Slot[],
+  sourceDay: number,
+  period: number,
+  time: Pick<Slot, 'startTime' | 'endTime'>,
+): { slots: Slot[]; affected: number } {
+  if (sourceDay < 1 || sourceDay > 5 || !courseTimeLabel(time) ||
+    !slots.some((slot) => slot.day === sourceDay && slot.period === period && slot.name.trim())) {
+    return { slots, affected: 0 }
+  }
+
+  let affected = 0
+  let changed = false
+  const next = slots.map((slot) => {
+    if (slot.day < 1 || slot.day > 5 || slot.period !== period || !slot.name.trim()) return slot
+    if (slot.startTime === time.startTime && slot.endTime === time.endTime) return slot
+    changed = true
+    if (slot.day !== sourceDay) affected += 1
+    return { ...slot, startTime: time.startTime, endTime: time.endTime }
+  })
+  return { slots: changed ? next : slots, affected }
+}
+
+/**
+ * Apply each valid class time from a selected weekday to the matching period
+ * on other weekdays. Blank source periods deliberately leave targets unchanged.
+ */
+export function applyDayTimesToWeek(
+  slots: Slot[],
+  sourceDay: number,
+): { slots: Slot[]; affected: number; periods: number } {
+  if (sourceDay < 1 || sourceDay > 5) return { slots, affected: 0, periods: 0 }
+  const hoursByPeriod = new Map<number, Pick<Slot, 'startTime' | 'endTime'>>()
+  for (const slot of slots) {
+    if (slot.day === sourceDay && slot.name.trim() && courseTimeLabel(slot)) {
+      hoursByPeriod.set(slot.period, { startTime: slot.startTime, endTime: slot.endTime })
+    }
+  }
+  if (!hoursByPeriod.size) return { slots, affected: 0, periods: 0 }
+  let affected = 0
+  const next = slots.map((slot) => {
+    if (slot.day < 1 || slot.day > 5 || slot.day === sourceDay || !slot.name.trim()) return slot
+    const source = hoursByPeriod.get(slot.period)
+    if (!source || (slot.startTime === source.startTime && slot.endTime === source.endTime)) return slot
+    affected += 1
+    return { ...slot, startTime: source.startTime, endTime: source.endTime }
+  })
+  return { slots: affected ? next : slots, affected, periods: hoursByPeriod.size }
+}
+
 export function periodTone(period: number) {
   return PERIOD_TONES[(period - 1) % PERIOD_TONES.length]
 }
