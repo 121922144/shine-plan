@@ -903,6 +903,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: {
   const [candidates, setCandidates] = useState<string[]>([])
   const [ocrText, setOcrText] = useState('')
   const [day, setDay] = useState(1)
+  const [lastEditedTimeDay, setLastEditedTimeDay] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -922,6 +923,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: {
     else if (name.trim()) setDraft([...draft, { id: uid(), day, period, name }])
   }
   const updateDraftTime = (period: number, field: 'startTime' | 'endTime', value: string) => {
+    setLastEditedTimeDay(day)
     setDraft((current) => current.map((slot) =>
       slot.day === day && slot.period === period
         ? { ...slot, [field]: value || undefined }
@@ -947,7 +949,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: {
     setSaving(true)
     setSaveError('')
     try {
-      await onSave(draft, currentSlots.length ? 'replace' : 'append', day)
+      await onSave(draft, currentSlots.length ? 'replace' : 'append', lastEditedTimeDay ?? day)
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : '保存出现异常，请稍后再试')
     } finally {
