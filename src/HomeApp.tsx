@@ -19,7 +19,7 @@ const ImportSheet = lazy(() => import('./features/ImportSheet').then((module) =>
 type Tab = 'home' | 'schedule' | 'settings'
 type CloudState = { hasState: boolean; slots: Slot[]; notes: DateNote[]; reminder: ReminderSettings }
 
-const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder' }
+const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder', pendingImport: 'bag-plan.pending-import' }
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
 // Vercel hosts the API in this same deployment; never forward to the old Sites backend.
@@ -208,7 +208,25 @@ export default function HomeApp() {
           state = await apiRequest<CloudState>('/api/state', token)
         }
         if (cancelled) return
-        if (state.hasState) {
+        // A timetable imported before a network request finishes must not be
+        // overwritten by an older cloud snapshot. Retry any unsynced import
+        // after reload before accepting remote slot data.
+        const pendingRaw = localStorage.getItem(STORAGE.pendingImport)
+        const pendingSlots = pendingRaw ? readStored<Slot[] | null>(STORAGE.pendingImport, null) : null
+        if (pendingSlots && Array.isArray(pendingSlots)) {
+          await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({
+            slots: pendingSlots, notes: localNotes,
+            reminder: { enabled: localReminder.enabled, time: localReminder.time },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+          }) })
+          if (localStorage.getItem(STORAGE.pendingImport) === pendingRaw) {
+            localStorage.removeItem(STORAGE.pendingImport)
+          }
+          if (cancelled) return
+          setSlots(pendingSlots)
+          setNotes(localNotes)
+          setReminder(localReminder)
+        } else if (state.hasState) {
           setSlots(state.slots); setNotes(state.notes ?? []); setReminder(state.reminder)
         } else {
           await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({ slots: localSlots, notes: localNotes, reminder: localReminder, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' }) })
@@ -235,6 +253,10 @@ export default function HomeApp() {
       setCloudStatus('正在同步…')
       try {
         await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({ slots, notes, reminder: { enabled: reminder.enabled, time: reminder.time }, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' }) })
+        // Only acknowledge the import pending flag for the exact timetable
+        // that the API just accepted. A newer edit must remain pending.
+        const pendingRaw = localStorage.getItem(STORAGE.pendingImport)
+        if (pendingRaw === JSON.stringify(slots)) localStorage.removeItem(STORAGE.pendingImport)
         setCloudStatus('已同步到云端')
       } catch { setCloudStatus('同步失败，联网后请重新打开应用') }
     }, 700)
@@ -311,8 +333,11 @@ export default function HomeApp() {
         const savedSlots = mode === 'replace' ? nextSlots : [...slots, ...nextSlots]
         // Save the complete draft (including startTime/endTime) to phone storage immediately.
         // Cloud synchronization is performed by the existing debounced state effect.
-        try { localStorage.setItem(STORAGE.slots, JSON.stringify(savedSlots)) }
-        catch { /* React state still retains the edited timetable. */ }
+        try {
+          const serialized = JSON.stringify(savedSlots)
+          localStorage.setItem(STORAGE.slots, serialized)
+          localStorage.setItem(STORAGE.pendingImport, serialized)
+        } catch { /* React state still retains the edited timetable. */ }
         setSlots(savedSlots)
         setImportOpen(false)
         selectTab('schedule')
