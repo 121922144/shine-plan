@@ -307,7 +307,17 @@ export default function HomeApp() {
         </div>
         <nav className="bottom-nav" aria-label="主导航"><NavButton active={tab === 'home'} label="首页" icon={<Home />} onClick={() => selectTab('home')} /><NavButton active={tab === 'schedule'} label="课表" icon={<CalendarDays />} onClick={() => selectTab('schedule')} /><NavButton active={tab === 'settings'} label="设置" icon={<Settings />} onClick={() => selectTab('settings')} /></nav>
       </main>
-      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => { setSlots(mode === 'replace' ? nextSlots : [...slots, ...nextSlots]); setImportOpen(false); selectTab('schedule'); showToast('课程表已保存') }} /></Suspense>}
+      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => {
+        const savedSlots = mode === 'replace' ? nextSlots : [...slots, ...nextSlots]
+        // Save the complete draft (including startTime/endTime) to phone storage immediately.
+        // Cloud synchronization is performed by the existing debounced state effect.
+        try { localStorage.setItem(STORAGE.slots, JSON.stringify(savedSlots)) }
+        catch { /* React state still retains the edited timetable. */ }
+        setSlots(savedSlots)
+        setImportOpen(false)
+        selectTab('schedule')
+        showToast(cloudReady ? '课程和时间已保存，正在同步云端…' : '课程和时间已保存到手机，等待云端同步')
+      }} /></Suspense>}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )
