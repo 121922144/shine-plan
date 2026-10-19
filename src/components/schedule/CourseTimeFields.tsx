@@ -17,7 +17,7 @@ export function CourseTimeFields({
 
   return (
     <div className="course-time-fields">
-      <div className="course-time-inputs">
+      <div className={`course-time-inputs${startTime || endTime ? ' has-clear' : ''}`}>
         <label className="course-time-field">
           <span>开始</span>
           <input
@@ -28,7 +28,6 @@ export function CourseTimeFields({
             aria-label={`第${period}节开始时间`}
           />
         </label>
-        <span className="course-time-separator" aria-hidden="true">—</span>
         <label className="course-time-field">
           <span>结束</span>
           <input
