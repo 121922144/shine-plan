@@ -20,7 +20,7 @@ export function courseEmoji(subject: string) {
 }
 
 /** A timetable without actual times must never display inferred example hours. */
-export const COURSE_CLOCK_REGEX = /^([01]\\d|2[0-3]):[0-5]\\d$/
+export const COURSE_CLOCK_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/
 
 export function courseTimeError(slot: Pick<Slot, 'startTime' | 'endTime'>): string {
   const start = slot.startTime || ''
