@@ -2,7 +2,8 @@
   --app-page-bg: #fffdf8;
   /* Shared ordinary form-control sizing. Decorative circular/pill controls retain their shapes. */
   --app-control-height: 32px;
-  --app-control-radius: 10px;
+  --app-control-radius: 9999px; /* Pill: rounded ends have a radius of half the button height. */
+  --app-course-time-height: 44px;
   --primary: #6547f5;
   --primary-deep: #4431d8;
   --blue: #3e72f6;
@@ -4220,62 +4221,105 @@ input:focus-visible {
 .course-time-inputs {
   width: 100%;
   display: grid;
-  /* Without a clear button, both inputs use the full row. */
+  /* Let both time pickers actually fill their full available columns. */
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: 8px;
 }
 
 .course-time-inputs.has-clear {
-  /* 56px is sufficient for “清空”; share the rest evenly between the time pickers. */
-  grid-template-columns: repeat(2, minmax(0, 1fr)) 56px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 60px;
 }
 
 .course-time-field {
+  display: grid;
   width: 100%;
   min-width: 0;
-  display: grid;
-  grid-template-rows: 18px var(--app-control-height);
-  align-items: stretch;
+  grid-template-rows: 18px var(--app-course-time-height);
   gap: 4px;
   color: #7192a8;
   font-size: 11px;
   white-space: nowrap;
 }
 
-.course-time-field > span {
+.course-time-field .course-time-caption {
+  display: block;
   line-height: 18px;
 }
 
-.course-time-field input[type="time"] {
+/* iOS renders the editable text inside a native time input much narrower than
+   its CSS width. Paint the value ourselves in a full-width control, keeping the
+   actual native input overlaid and clickable to invoke the system time picker. */
+.course-time-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: var(--app-course-time-height);
+  padding: 0 6px;
+  border: 1px solid #cde4ef;
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: #f4faff;
+  cursor: pointer;
+}
+
+.course-time-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  line-height: 1;
+  text-align: center;
+  color: #285a80;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.course-time-display.is-placeholder {
+  color: #91aabc;
+  font-size: 13px;
+  font-weight: 450;
+}
+
+.course-time-control:focus-within {
+  outline: 2px solid #6cbee7;
+  outline-offset: 1px;
+}
+
+.course-time-control input[type="time"],
+.import-sheet .compact-list .period-row .course-time-control input[type="time"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: block;
   width: 100%;
   min-width: 0;
   max-width: none;
-  height: var(--app-control-height);
+  height: 100%;
+  min-height: 0;
   margin: 0;
-  padding: 0 6px;
-  box-sizing: border-box;
-  border: 1px solid #cde4ef;
-  border-radius: var(--app-control-radius);
-  outline-offset: 1px;
-  background: #f4faff;
-  color: #285a80;
-  font-size: 16px; /* Prevent focus-zoom on iPhone Safari. */
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
-}
-
-.course-time-separator {
-  display: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
 }
 
 .course-time-clear {
   justify-self: stretch;
   align-self: end;
   width: 100%;
-  height: var(--app-control-height);
-  min-height: var(--app-control-height);
+  height: var(--app-course-time-height);
+  min-height: var(--app-course-time-height);
   margin: 0;
   padding: 0 4px;
   border: 1px solid #e0e9ee;
@@ -4348,15 +4392,10 @@ input:focus-visible {
   font-weight: 650;
 }
 
-.import-sheet .compact-list .period-row .course-time-field input[type="time"] {
-  width: 100%;
-  height: var(--app-control-height);
-  padding: 0 4px;
-  border: 1px solid #d7e8f0;
-  border-radius: var(--app-control-radius);
+.import-sheet .compact-list .period-row .course-time-control {
+  height: var(--app-course-time-height);
   background: #f5fbff;
-  font-size: 16px;
-  font-weight: 550;
+  border-color: #d7e8f0;
 }
 
 .import-sheet .course-time-field {
@@ -4372,12 +4411,6 @@ input:focus-visible {
 }
 
 @media (max-width: 380px) {
-  .course-time-field input[type="time"],
-  .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
-    width: 100%;
-    padding-inline: 2px;
-  }
-
   .course-time-inputs {
     gap: 4px;
   }
@@ -4397,13 +4430,27 @@ input:focus-visible {
 }
 
 
-/* Consistent rounded action buttons; keep deliberately circular icon buttons,
-   date selectors and rounded status badges unchanged. */
+/* Pill-shaped action buttons: for any height, each end forms a semicircle.
+   Keep navigation tabs, decorative cards and circular icon buttons as intended. */
 .primary-button,
 .secondary-button,
 .small-button,
+.text-button,
 .schedule-reimport,
+.reimport-button,
 .schedule-time-editor-actions button,
-.course-time-clear {
+.course-time-clear,
+.shine-course-empty button,
+.shine-day-switch button,
+.home-day-switch button,
+.import-sheet .candidate-box button,
+.import-sheet .day-tabs.compact button {
   border-radius: var(--app-control-radius);
+}
+
+/* Icon-only square actions remain truly circular rather than rounded squares. */
+.icon-button,
+.import-sheet .sheet-header .icon-button,
+.schedule-month-row > button {
+  border-radius: 50%;
 }
