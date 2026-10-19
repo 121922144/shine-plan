@@ -4169,3 +4169,195 @@ input:focus-visible {
     bottom: 12px;
   }
 }
+
+
+/* Optional per-course hours. Only the edit affordance appears until hours are provided. */
+.schedule-course-copy .schedule-time-trigger {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 22px;
+  padding: 0 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: #6899b2;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.schedule-course-copy .schedule-time-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.schedule-course-copy .schedule-time-trigger svg {
+  flex: 0 0 auto;
+}
+
+.schedule-time-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid #e4eef4;
+}
+
+.course-time-fields {
+  min-width: 0;
+}
+
+.course-time-inputs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-time-field {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 4px;
+  color: #7192a8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.course-time-field > span {
+  flex: 0 0 auto;
+}
+
+.course-time-field input[type="time"] {
+  width: 100px;
+  min-width: 0;
+  height: 32px;
+  padding: 3px 6px;
+  border: 1px solid #cde4ef;
+  border-radius: 10px;
+  outline-offset: 1px;
+  background: #f4faff;
+  color: #285a80;
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.course-time-separator {
+  color: #9aafba;
+  font-size: 12px;
+}
+
+.course-time-clear {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #f3f6f8;
+  color: #7b8fa2;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.course-time-warning,
+.import-time-error {
+  display: block;
+  margin: 6px 0 0;
+  color: #c2784f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.schedule-time-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-time-editor-actions button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid #d8e7ef;
+  border-radius: 10px;
+  background: #fff;
+  color: #608ba6;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.schedule-time-editor-actions .is-primary {
+  border-color: #45b2e6;
+  background: #42b0e4;
+  color: #fff;
+}
+
+.schedule-time-editor-actions .is-primary:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* Import review: each recognized course has editable but optional start/end time. */
+.import-sheet .compact-list .period-row {
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 10px;
+}
+
+.import-course-edit {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.import-sheet .compact-list .period-row .import-course-name {
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.import-sheet .compact-list .period-row .course-time-field input[type="time"] {
+  width: 94px;
+  height: 32px;
+  padding: 3px 4px;
+  border: 1px solid #d7e8f0;
+  border-radius: 10px;
+  background: #f5fbff;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.import-sheet .course-time-field {
+  gap: 3px;
+}
+
+.import-sheet .course-time-inputs {
+  gap: 5px;
+}
+
+.import-sheet .import-time-error {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 380px) {
+  .course-time-field input[type="time"],
+  .import-sheet .compact-list .period-row .course-time-field input[type="time"] {
+    width: 84px;
+    font-size: 11px;
+    padding-inline: 2px;
+  }
+
+  .course-time-inputs {
+    gap: 4px;
+  }
+}
