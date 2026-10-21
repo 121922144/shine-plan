@@ -1,4 +1,4 @@
-import { getD1 } from '@/db'
+import { dbQuery } from '@/db'
 
 export function json(data: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers)
@@ -22,5 +22,6 @@ export async function requireDevice(request: Request) {
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
   if (!token || token.length < 32) return null
   const hash = await tokenHash(token)
-  return getD1().prepare('SELECT id FROM devices WHERE token_hash = ?').bind(hash).first<{ id: string }>()
+  const { rows } = await dbQuery<{ id: string }>('SELECT id FROM devices WHERE token_hash = $1', [hash])
+  return rows[0] ?? null
 }

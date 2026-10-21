@@ -1,5 +1,9 @@
 :root {
   --app-page-bg: #fffdf8;
+  /* Shared ordinary form-control sizing. Decorative circular/pill controls retain their shapes. */
+  --app-control-height: 32px;
+  --app-control-radius: 9999px; /* Pill: rounded ends have a radius of half the button height. */
+  --app-course-time-height: 44px;
   --primary: #6547f5;
   --primary-deep: #4431d8;
   --blue: #3e72f6;
@@ -44,6 +48,7 @@ input {
 
 button {
   -webkit-tap-highlight-color: transparent;
+  border-radius: var(--app-control-radius);
 }
 
 button:focus:not(:focus-visible),
@@ -1049,6 +1054,7 @@ input:focus-visible {
   --muted: #8192ab;
   --line: #ecf0f2;
   padding: 14px 14px 28px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .settings-content {
@@ -2048,14 +2054,28 @@ input:focus-visible {
   line-height: 1.45;
 }
 
-.import-sheet .icon-button {
+.import-sheet .sheet-header .icon-button {
+  position: relative;
   width: 44px;
   height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   border: 0;
   border-radius: 50%;
   background: #f0f8fc;
   color: #4e789a;
   transition: background-color .16s ease, color .16s ease, transform .16s ease;
+}
+
+/* Center the actual icon glyph within each circular button on iOS Safari. */
+.import-sheet .sheet-header .icon-button > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  margin: 0;
+  transform: translate(-50%, -50%);
 }
 
 .import-sheet .icon-button:hover {
@@ -2221,7 +2241,7 @@ input:focus-visible {
   display: grid;
   isolation: isolate;
   min-height: 280px;
-  background: linear-gradient(135deg, #f2faff, #b5e2ff 65%, #a0d8ff);
+  background: linear-gradient(180deg, #f6f3ec 0%, #eef7ff 12%, #b5e2ff 65%, #a0d8ff 100%);
 }
 
 .shine-hero-art {
@@ -2894,15 +2914,6 @@ input:focus-visible {
   line-height: 1.55;
 }
 
-.shine-home-active .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .shine-home-active .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -3429,7 +3440,8 @@ input:focus-visible {
 /* Schedule page — scoped so the confirmed home surface stays unchanged. */
 .schedule-page {
   min-height: 100%;
-  padding: 14px 14px 34px;
+  padding: 14px 14px 14px;
+  background: linear-gradient(180deg, #f6f3ec 0, #f6f3ec 18px, var(--app-page-bg) 72px);
 }
 
 .schedule-banner {
@@ -3734,6 +3746,20 @@ input:focus-visible {
   text-overflow: ellipsis;
 }
 
+.schedule-course-copy h3 {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: #244c78;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .schedule-course-copy input::placeholder {
   color: #9cabb6;
   font-weight: 500;
@@ -3929,15 +3955,6 @@ input:focus-visible {
   animation: skeleton-shift 1.4s ease-in-out infinite;
 }
 
-.app-shell:has(.schedule-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
-}
-
 .app-shell:has(.schedule-page) .nav-button {
   min-height: 52px;
   gap: 3px;
@@ -4027,6 +4044,10 @@ input:focus-visible {
     font-size: 15px;
   }
 
+  .schedule-course-copy h3 {
+    font-size: 15px;
+  }
+
   .schedule-course-status {
     font-size: 11px;
   }
@@ -4046,15 +4067,6 @@ input:focus-visible {
 /* Settings keeps the shared navigation, with the same light blue treatment as the timetable. */
 .app-shell:has(.settings-page) .phone-frame {
   border-color: #ede8df;
-}
-
-.app-shell:has(.settings-page) .bottom-nav {
-  margin: 0 10px calc(9px + env(safe-area-inset-bottom));
-  padding: 7px 10px 8px;
-  border: 1px solid rgba(232, 235, 231, .7);
-  border-radius: 23px;
-  background: rgba(255, 254, 250, .97);
-  box-shadow: 0 3px 16px rgba(105, 123, 133, .06);
 }
 
 .app-shell:has(.settings-page) .nav-button {
@@ -4104,4 +4116,494 @@ input:focus-visible {
   .setting-action h3 {
     font-size: 15px;
   }
+}
+
+/* Floating navigation: scrollable content continues behind the translucent dock.
+   Keep the dock close to the iPhone home indicator without covering it. */
+.phone-frame {
+  position: relative;
+}
+
+/* Small shared scroll clearance: the final card can scroll just above
+   the floating dock, without the large blank area previously left below it. */
+.phone-frame > .page-content {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+}
+
+/* Keep the final card readable; fade only the area nearest the dock and
+   completely cover scrolling content below the iPhone home indicator. */
+.phone-frame::after {
+  content: '';
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(106px + env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 30%,
+    rgba(255, 253, 248, .45) 56%,
+    var(--app-page-bg) 85%,
+    var(--app-page-bg) 100%
+  );
+}
+
+.phone-frame > .bottom-nav {
+  position: absolute;
+  z-index: 30;
+  left: 10px;
+  right: 10px;
+  bottom: calc(2px + env(safe-area-inset-bottom));
+  width: auto;
+  margin: 0;
+  padding: 7px 10px 8px;
+  border: 1px solid rgba(232, 235, 231, .72);
+  border-radius: 23px;
+  /* Keep the floating dock readable; the fade belongs behind it, not inside it. */
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 5px 22px rgba(82, 115, 142, .13);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+@media (min-width: 521px) {
+  .phone-frame > .bottom-nav {
+    bottom: 12px;
+  }
+}
+
+
+/* Optional per-course hours. Only the edit affordance appears until hours are provided. */
+.schedule-course-copy .schedule-time-trigger {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 22px;
+  padding: 0 2px 0 0;
+  border: 0;
+  background: transparent;
+  color: #6899b2;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.schedule-course-copy .schedule-time-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.schedule-course-copy .schedule-time-trigger svg {
+  flex: 0 0 auto;
+}
+
+.schedule-time-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid #e4eef4;
+}
+
+.course-time-fields {
+  min-width: 0;
+}
+
+.course-time-inputs {
+  width: 100%;
+  display: grid;
+  /* Let both time pickers actually fill their full available columns. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+}
+
+.course-time-inputs.has-clear {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 60px;
+}
+
+.course-time-field {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-rows: 18px var(--app-course-time-height);
+  gap: 4px;
+  color: #7192a8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.course-time-field .course-time-caption {
+  display: block;
+  line-height: 18px;
+}
+
+/* iOS renders the editable text inside a native time input much narrower than
+   its CSS width. Paint the value ourselves in a full-width control, keeping the
+   actual native input overlaid and clickable to invoke the system time picker. */
+.course-time-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: var(--app-course-time-height);
+  padding: 0 6px;
+  border: 1px solid #cde4ef;
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: #f4faff;
+  cursor: pointer;
+}
+
+.course-time-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  line-height: 1;
+  text-align: center;
+  color: #285a80;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.course-time-display.is-placeholder {
+  color: #91aabc;
+  font-size: 13px;
+  font-weight: 450;
+}
+
+.course-time-control:focus-within {
+  outline: 2px solid #6cbee7;
+  outline-offset: 1px;
+}
+
+.course-time-control input[type="time"],
+.import-sheet .compact-list .period-row .course-time-control input[type="time"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.course-time-clear {
+  justify-self: stretch;
+  align-self: end;
+  width: 100%;
+  height: var(--app-course-time-height);
+  min-height: var(--app-course-time-height);
+  margin: 0;
+  padding: 0 4px;
+  border: 1px solid #e0e9ee;
+  border-radius: var(--app-control-radius);
+  background: #f3f6f8;
+  color: #7b8fa2;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.course-time-warning,
+.import-time-error {
+  display: block;
+  margin: 6px 0 0;
+  color: #c2784f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.schedule-time-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-time-editor-actions button {
+  min-height: var(--app-control-height);
+  padding: 5px 12px;
+  border: 1px solid #d8e7ef;
+  border-radius: var(--app-control-radius);
+  background: #fff;
+  color: #608ba6;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.schedule-time-editor-actions .is-primary {
+  border-color: #45b2e6;
+  background: #42b0e4;
+  color: #fff;
+}
+
+.schedule-time-editor-actions .is-primary:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* Import review: each recognized course has editable but optional start/end time. */
+.import-sheet .compact-list .period-row {
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 10px;
+}
+
+.import-course-edit {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.import-sheet .compact-list .period-row .import-course-name {
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.import-sheet .compact-list .period-row .course-time-control {
+  height: var(--app-course-time-height);
+  background: #f5fbff;
+  border-color: #d7e8f0;
+}
+
+.import-sheet .course-time-field {
+  gap: 3px;
+}
+
+.import-sheet .course-time-inputs {
+  gap: 5px;
+}
+
+.import-sheet .import-time-error {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 380px) {
+  .course-time-inputs {
+    gap: 4px;
+  }
+}
+
+/* At very narrow widths, preserve usable time pickers; clear sits below instead of overlapping. */
+@media (max-width: 340px) {
+  .course-time-inputs.has-clear {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .course-time-clear {
+    grid-column: 2;
+    justify-self: end;
+    width: 64px;
+  }
+}
+
+
+/* Pill-shaped action buttons: for any height, each end forms a semicircle.
+   Keep navigation tabs, decorative cards and circular icon buttons as intended. */
+.primary-button,
+.secondary-button,
+.small-button,
+.text-button,
+.schedule-reimport,
+.reimport-button,
+.schedule-time-editor-actions button,
+.course-time-clear,
+.shine-course-empty button,
+.shine-day-switch button,
+.home-day-switch button,
+.import-sheet .candidate-box button,
+.import-sheet .day-tabs.compact button {
+  border-radius: var(--app-control-radius);
+}
+
+/* Icon-only square actions remain truly circular rather than rounded squares. */
+.icon-button,
+.import-sheet .sheet-header .icon-button,
+.schedule-month-row > button {
+  border-radius: 50%;
+}
+
+
+/* Weekday time reuse actions: synchronize hours only, never course names. */
+.schedule-time-batch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 2px 12px;
+  padding: 8px 12px;
+  border: 1px solid #e4eff6;
+  border-radius: 14px;
+  background: #f4faff;
+}
+
+.schedule-time-batch > span {
+  color: #7794a8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.schedule-time-batch-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--app-control-height);
+  padding: 0 12px;
+  border: 1px solid #b9dff1;
+  border-radius: var(--app-control-radius);
+  background: #fff;
+  color: #3086b6;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.schedule-time-batch-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.schedule-time-editor-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.schedule-time-editor-actions .is-apply-week {
+  border-color: #abd9ed;
+  border-radius: var(--app-control-radius);
+  background: #e8f7ff;
+  color: #247ea9;
+  font-weight: 650;
+}
+
+.schedule-time-editor-actions .is-apply-week:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 380px) {
+  .schedule-time-batch {
+    justify-content: flex-end;
+  }
+
+  .schedule-time-batch > span {
+    flex: 1 1 100%;
+  }
+
+  .schedule-time-editor-actions button {
+    padding-inline: 10px;
+  }
+}
+
+
+/* Timetable import review: always-visible Save footer, so edited class times
+   cannot be mistaken for saved data while the eight rows scroll above it. */
+.sheet.import-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 94dvh;
+}
+
+.import-sheet .sheet-handle,
+.import-sheet .sheet-header {
+  flex: 0 0 auto;
+}
+
+.import-sheet .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.import-sheet .import-save-footer {
+  flex: 0 0 auto;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid #dceaf1;
+  background: rgba(255, 254, 250, .98);
+  box-shadow: 0 -8px 18px rgba(70, 119, 149, .065);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.import-save-hint {
+  margin-bottom: 8px;
+  color: #6c91a9;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.import-sheet .import-save-footer .primary-button {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 9999px;
+}
+
+/* "Clear" shares the same 12px corner treatment, outline and surface as the
+   neighboring time inputs, rather than the global pill-button styling. */
+.course-time-inputs .course-time-clear {
+  border: 1px solid #cde4ef;
+  border-radius: 12px;
+  background: #f4faff;
+  color: #6389a1;
+}
+
+.import-sheet .course-time-inputs .course-time-clear {
+  border-color: #d7e8f0;
+  background: #f5fbff;
+}
+
+@media (max-width: 380px) {
+  .import-sheet .import-save-footer {
+    padding-inline: 16px;
+  }
+}
+
+/* Explicit error when local save succeeds but cloud read-back is not confirmed. */
+.import-sheet .import-save-error {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid #f3d5be;
+  border-radius: 12px;
+  background: #fff8f1;
+  color: #a96645;
+  font-size: 12px;
+  line-height: 1.55;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BellRing,
   CalendarDays,
@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock3,
   Cloud,
+  Copy,
   Download,
   RefreshCw,
   Sparkles,
@@ -15,7 +16,8 @@ import {
 } from "lucide-react";
 import { ScheduleCourseCard } from "../components/schedule/ScheduleCourseCard";
 import { NoCoursePanel } from "../components/schedule/NoCoursePanel";
-import { periodTime } from "../coursePresentation";
+import { applyDayTimesToWeek, applyPeriodTimeToWeek, courseStatusAt, courseTimeLabel } from "../coursePresentation";
+import { useCourseClock } from "../useCourseClock";
 import type { ReminderSettings, Slot } from "../domain";
 
 export type { ReminderSettings, Slot } from "../domain";
@@ -35,24 +37,6 @@ function sameDate(left: Date, right: Date) {
     left.getMonth() === right.getMonth() &&
     left.getDate() === right.getDate()
   );
-}
-
-function courseStatus(
-  date: Date,
-  period: number,
-  hasCourse: boolean,
-): "已上课" | "待上课" | "休息" {
-  if (!hasCourse) return "休息";
-  const today = startOfDay(new Date());
-  const selected = startOfDay(date);
-  if (selected < today) return "已上课";
-  if (selected > today) return "待上课";
-  const endTime = periodTime(period).split(" - ")[1];
-  if (!endTime) return "待上课";
-  const [hour, minute] = endTime.split(":").map(Number);
-  const end = new Date(date);
-  end.setHours(hour, minute, 0, 0);
-  return new Date() > end ? "已上课" : "待上课";
 }
 
 function Switch({
@@ -80,13 +64,26 @@ export function SchedulePage({
   slots,
   onChange,
   onImport,
+  onNotify,
+  importFocus,
 }: {
   slots: Slot[];
   onChange: (slots: Slot[]) => void;
   onImport: () => void;
+  onNotify: (message: string) => void;
+  importFocus?: { day: number; serial: number } | null;
 }) {
   const [day, setDay] = useState(Math.min(5, Math.max(1, new Date().getDay())));
   const [weekOffset, setWeekOffset] = useState(0);
+  // Import saves retain the weekday being reviewed rather than silently
+  // switching to today's timetable (which may have no times configured).
+  useEffect(() => {
+    if (importFocus?.day && importFocus.day >= 1 && importFocus.day <= 5) {
+      setDay(importFocus.day);
+      setWeekOffset(0);
+    }
+  }, [importFocus]);
+  const now = useCourseClock();
   const isSchoolDay = day >= 1 && day <= 5;
   const getSlot = (period: number) =>
     slots.find((slot) => slot.day === day && slot.period === period);
@@ -104,7 +101,48 @@ export function SchedulePage({
     else if (name.trim())
       onChange([...slots, { id: uid(), day, period, name }]);
   };
-  const today = startOfDay(new Date());
+  const updateTime = (period: number, startTime?: string, endTime?: string) => {
+    if (!isSchoolDay) return;
+    const current = getSlot(period);
+    if (!current) return;
+    onChange(slots.map((slot) => slot.id === current.id ? { ...slot, startTime, endTime } : slot));
+  };
+  const weekdayTimePreview = applyDayTimesToWeek(slots, day);
+  const applySingleCourseTimeToWeek = (period: number, startTime: string, endTime: string): boolean => {
+    if (!isSchoolDay || !getSlot(period)) return false;
+    const matchingCourses = slots.filter((slot) =>
+      slot.day !== day && slot.day >= 1 && slot.day <= 5 &&
+      slot.period === period && slot.name.trim(),
+    );
+    if (!matchingCourses.length) {
+      onNotify("其他工作日没有同节次课程，未修改课表");
+      return false;
+    }
+    const { slots: updated, affected } = applyPeriodTimeToWeek(slots, day, period, { startTime, endTime });
+    if (!window.confirm(
+      `将${DAYS[day]}第${period}节的 ${startTime} - ${endTime} 应用到其他工作日的同节次课程吗？\n` +
+      `共匹配 ${matchingCourses.length} 节课，其中 ${affected} 节时间将改变。\n` +
+      "只复制时间，不修改课程名称，也不会新增课程。",
+    )) return false;
+    if (updated !== slots) onChange(updated);
+    onNotify(affected ? `已将第${period}节时间应用到其他 ${affected} 节课程` : "各工作日同节次时间已一致");
+    return true;
+  };
+  const applyWholeDayTimeToWeek = () => {
+    if (!isSchoolDay || !weekdayTimePreview.periods) return;
+    if (!weekdayTimePreview.affected) {
+      onNotify("其他工作日已有课程的对应节次时间一致，或没有对应课程");
+      return;
+    }
+    if (!window.confirm(
+      `将${DAYS[day]}已填写时间的 ${weekdayTimePreview.periods} 个节次应用到周一至周五的其他天吗？\n` +
+      `会覆盖其他工作日 ${weekdayTimePreview.affected} 节课程的时间。\n` +
+      "未填写时间的节次不处理；课程名称不变，也不会新增课程。",
+    )) return;
+    onChange(weekdayTimePreview.slots);
+    onNotify(`已将${DAYS[day]}时间应用到其他 ${weekdayTimePreview.affected} 节课程`);
+  };
+  const today = startOfDay(now);
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - today.getDay() + weekOffset * 7);
   const weekDates = WEEK_DAYS.map((_, index) => {
@@ -116,6 +154,7 @@ export function SchedulePage({
   const selectedSlots = slots.filter(
     (slot) => slot.day === day && slot.name.trim().length > 0,
   );
+  const savedTimeCount = selectedSlots.filter((slot) => Boolean(courseTimeLabel(slot))).length;
   const isToday = sameDate(selectedDate, today);
   const selectedLabel = isToday ? "今天" : DAYS[day];
 
@@ -181,7 +220,9 @@ export function SchedulePage({
               {selectedLabel} · {selectedDate.getMonth() + 1}月
               {selectedDate.getDate()}日
             </h2>
-            <p>{isSchoolDay ? "课程名称可以直接修改" : "周末休息一下吧"}</p>
+            <p>{isSchoolDay
+              ? `课程和时间均可修改 · 本日已设时间 ${savedTimeCount}/${selectedSlots.length} 节`
+              : "周末休息一下吧"}</p>
           </div>
           <div className="schedule-section-actions">
             <span className="schedule-section-count">
@@ -198,6 +239,22 @@ export function SchedulePage({
           </div>
         </div>
 
+        {isSchoolDay && selectedSlots.length > 0 && (
+          <div className="schedule-time-batch">
+            <span>只同步时间，课程名称不变</span>
+            <button
+              className="schedule-time-batch-button"
+              type="button"
+              disabled={!weekdayTimePreview.periods}
+              onClick={applyWholeDayTimeToWeek}
+              title={weekdayTimePreview.periods ? "按节次同步到其它工作日已有课程" : "请先为当天至少一节课设置上课时间"}
+            >
+              <Copy size={13} />
+              本日时间应用到每天
+            </button>
+          </div>
+        )}
+
         <div className="schedule-course-list">
           {selectedSlots.length === 0 ? (
             <NoCoursePanel isWeekend={!isSchoolDay} isToday={isToday} />
@@ -209,9 +266,11 @@ export function SchedulePage({
                   key={`${day}-${period}`}
                   period={period}
                   slot={slot}
-                  status={courseStatus(selectedDate, period, Boolean(slot))}
+                  status={slot ? courseStatusAt(slot, selectedDate, now) : "休息"}
                   readOnly={!isSchoolDay}
                   onChange={(name) => update(period, name)}
+                  onTimeChange={(startTime, endTime) => updateTime(period, startTime, endTime)}
+                  onApplyToWeek={(startTime, endTime) => applySingleCourseTimeToWeek(period, startTime, endTime)}
                 />
               );
             })
@@ -253,6 +312,7 @@ export function SettingsPage({
   isStandalone: boolean;
 }) {
   const cloudOnline = cloudStatus.includes("已同步");
+  const reminderNeedsSetup = pushStatus.includes("未配置提醒服务");
 
   return (
     <section className="settings-page">
@@ -312,8 +372,10 @@ export function SettingsPage({
           <BellRing />
           <span>
             {reminder.enabled
-              ? `后台推送已启用${reminder.lastSent ? `，最近发送于 ${reminder.lastSent}` : ""}。`
-              : "后台推送尚未开启，开启每日提醒后可收到课程通知。"}
+              ? `通知订阅已开启${reminder.lastSent ? `，最近发送于 ${reminder.lastSent}` : ""}。每日定时发送需完成调度配置。`
+              : reminderNeedsSetup
+                ? "当前预览版还没有连接独立的后台提醒服务。可以先使用下方「添加到系统日历」，或等待后端配置完成。"
+                : "后台推送尚未开启，开启每日提醒后可收到课程通知。"}
           </span>
         </div>
 
@@ -348,7 +410,7 @@ export function SettingsPage({
               <Cloud />
             </span>
             <div>
-              <h3>匿名云端保存</h3>
+              <h3>{cloudOnline ? "匿名云端保存" : "本机保存"}</h3>
               <p>{cloudStatus}</p>
             </div>
             <span
@@ -366,7 +428,9 @@ export function SettingsPage({
           清空课程与日期提醒
         </button>
         <p className="local-note">
-          课程表图片不会上传；只有确认后的课程和日期提醒会匿名保存。
+          {cloudOnline
+            ? "课程表图片不会上传；只有确认后的课程和日期提醒会匿名保存。"
+            : "课程表图片不会上传；课程与提醒时间暂保存在本机，清理浏览器数据可能会丢失。"} 
         </p>
         <p className="settings-footer">
           <img src="/assets/icons/star.png" alt="" />

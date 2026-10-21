@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronLeft, ImagePlus, ListChecks, LoaderCircle, Plus, Sparkles, X } from 'lucide-react'
 import type { Slot } from '../domain'
+import { courseTimeError } from '../coursePresentation'
+import { CourseTimeFields } from '../components/schedule/CourseTimeFields'
 
 type ImportStep = 'pick' | 'reading' | 'review'
 const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -127,7 +129,13 @@ function findEvenlySpacedBounds(lines: number[], count: number, width: number, m
       const score = candidate.reduce((sum, value, index) => (
         sum + Math.abs(value - (start + step * index)) / step
       ), 0) / count
-      if (!best || score < best.score) best = { lines: candidate, score }
+      // 有“节次”列的课表会出现 7 条等距竖线（节次列 + 周一至周五）。
+      // 同样精确的 6 条线必须选靠右的一组，否则周一会被误当成节次列，
+      // 导致周一全空、周二读成周一。
+      if (!best || score < best.score - 0.001 ||
+          (Math.abs(score - best.score) <= 0.001 && end > best.lines.at(-1)!)) {
+        best = { lines: candidate, score }
+      }
     }
   }
   return best && best.score < maxScore ? best.lines : null
@@ -204,8 +212,18 @@ function preferCourse(raw: string, candidate: string, current: { name: string; e
 function matchGridCourse(value: string) {
   const compact = normalizeCourseName(value).replace(/\s+/g, '')
   if (/^康(?:陈[\p{L}]{1,3})?$/u.test(compact)) return '康'
+  // 课程名称被单元格边界截断时，OCR 可能只读出“道德与”。
+  // 这是课程表中“道德与法治”的独有前缀；不能要求完整四字都出现。
+  // 排除跨课程的额外文字，避免将普通噪声错误补全。
+  if (/^道德与(?:法治)?[|｜;；:：、，,.。!！]?$/u.test(compact)) return '道德与法治'
   if (compact.includes('班会') && compact.includes('心理健康')) {
-    return compact.includes('升旗') ? '班会 · 心理健康（含升旗仪式）' : '班会 · 心理健康'
+    // OCR 已识别出连接词时保留课表原文，不统一替换成“·”。
+    const hasOriginalAnd = /班会与心理健康/.test(compact)
+    const hasOriginalDot = /班会[·•・]心理健康/.test(compact)
+    const course = hasOriginalAnd ? '班会与心理健康'
+      : hasOriginalDot ? '班会 · 心理健康'
+        : '班会与心理健康'
+    return compact.includes('升旗') ? `${course}（含升旗仪式）` : course
   }
   // 第 7 节有时会在同一个时间段里并列展示两种安排，不能只返回前半个课程名。
   const hasDelayService = compact.includes('延时服务') || compact.includes('服务延')
@@ -356,8 +374,54 @@ async function recognizeGridTimetable(
   const verticalLines = groupLinePositions(verticalPixels)
   // 第 7 节会在每个星期格内再分成两格，因此必须允许跳过这些“半列”竖线，
   // 从候选线中挑出六条真正的星期边界。
-  const dayBounds = findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
+  // 部分课表把“节次”列与五个星期列画成完全等宽的 6 列。
+  // 此时会检测到 7 条等距竖线；必须排除最左侧的节次列，
+  // 取最右边的 6 条边界。仅凭“等距评分”无法区分这两组。
+  const isEvenlySpaced = (bounds: number[]) => {
+    if (bounds.length !== 7) return false
+    const gaps = bounds.slice(1).map((line, index) => line - bounds[index])
+    const average = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length
+    return average >= source.width * 0.075 &&
+      average <= source.width * 0.23 &&
+      gaps.every((gap) => Math.abs(gap - average) <= average * 0.14)
+  }
+  const dayBounds = isEvenlySpaced(verticalLines)
+    ? verticalLines.slice(1)
+    : findEvenlySpacedBounds(verticalLines, 6, source.width, 0.16)
   if (!dayBounds) return null
+  // 网格日志确认：旧算法可能选到 [119,251,365,498,630,762]，
+  // 但真实最右边界为 845。以真实右边界为锚点重新定位五个星期，
+  // 不再用未锚定的等距搜索重复选回错误的六条线。
+  const rightmostTableLine = verticalLines.at(-1)
+  if (rightmostTableLine !== undefined &&
+      rightmostTableLine > source.width * 0.75 &&
+      rightmostTableLine - dayBounds[5] > source.width * 0.07) {
+    let bestRightAnchored: { bounds: number[]; score: number } | null = null
+    for (const left of verticalLines) {
+      const span = rightmostTableLine - left
+      const step = span / 5
+      if (step < source.width * 0.085 || step > source.width * 0.19) continue
+      const bounds = [left]
+      let previous = left
+      let score = 0
+      for (let index = 1; index < 5; index += 1) {
+        const expected = left + index * step
+        const candidates = verticalLines.filter((x) => x > previous + step * 0.55 && x < rightmostTableLine)
+        const nearest = candidates.sort((a, b) => Math.abs(a - expected) - Math.abs(b - expected))[0]
+        if (nearest === undefined) break
+        bounds.push(nearest)
+        score += Math.abs(nearest - expected) / step
+        previous = nearest
+      }
+      if (bounds.length !== 5) continue
+      bounds.push(rightmostTableLine)
+      score /= 6
+      if (!bestRightAnchored || score < bestRightAnchored.score) bestRightAnchored = { bounds, score }
+    }
+    if (bestRightAnchored && bestRightAnchored.score < 0.2) {
+      dayBounds.splice(0, dayBounds.length, ...bestRightAnchored.bounds)
+    }
+  }
 
   const majorHorizontalPixels: number[] = []
   const minorHorizontalPixels: number[] = []
@@ -429,17 +493,46 @@ async function recognizeGridTimetable(
       if (row.top < headerBottom || row.bottom - row.top < 20) return false
       const looksLikeCourseRow = fillRatio(row.top, row.bottom) > 0.15
       const hasPeriodLabel = row.bottom - row.top >= 40 && periodLabelRatio(row.top, row.bottom) > 0.012
-      // 有独立“节次 / 时间”两列时，用两列之间的竖线精准排除大课间、眼保健操和午休横条。
+      // 午休/早自习等横向合并的提示行通常没有周一至周五之间的竖线。
+      // 仅当 4 条星期分隔线全部缺失时跳过；普通空课程行仍有完整竖线，不受影响。
+      const weekdayDividers = dayBounds.slice(1, 5)
+      const intactWeekdayDividers = weekdayDividers.filter(
+        (x) => verticalDividerRatio(x, row.top, row.bottom) > 0.48,
+      ).length
+      if (intactWeekdayDividers === 0) return false
+      // 有独立“节次 / 时间”两列时，用两列之间的竖线排除非课程横条。
       if (periodDivider !== undefined) return verticalDividerRatio(periodDivider, row.top, row.bottom) > 0.55
       return looksLikeCourseRow || hasPeriodLabel
     })
     .slice(0, 8)
   if (periodRows.length < 3) return null
 
+  // 只对带有明确“早自习”行的课表启用特殊处理；普通课表仍使用旧版行号，
+  // 避免上一版按不完整节次 OCR 推算导致的回归。
+  // 左侧标签只读第一行，不能因为其他行 OCR 不清晰就重排所有课程。
+  let leadingStudyRow = false
+  if (periodRows.length >= 2) {
+    const first = periodRows[0]
+    const labelRight = Math.max(24, dayBounds[0] - 4)
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: '7' })
+      const labelImage = await createOriginalCell(source, 8, first.top + 2, labelRight, first.bottom - 2, 3)
+      const labelResult = await worker.recognize(labelImage, {}, { text: true })
+      const label = String(labelResult.data?.text ?? '').replace(/\s+/g, '')
+      leadingStudyRow = /早.{0,2}习|早读|晨读|自习/.test(label)
+    } catch (error) {
+      console.warn('早自习行检测失败，保持原有节次', error)
+    }
+  }
+  const courseRows = leadingStudyRow ? periodRows.slice(1) : periodRows
   const slots: Slot[] = []
   const rawLines: string[] = []
+  rawLines.push(`网格边界：原始竖线 [${verticalLines.join(', ')}]；星期边界 [${dayBounds.join(', ')}]`)
+  rawLines.push(`图片宽度：${source.width}；右边界：${rightmostTableLine ?? '无'}；右边界比例：${rightmostTableLine === undefined ? '无' : (rightmostTableLine / source.width).toFixed(3)}`)
+  rawLines.push(`识别课程行：${periodRows.length}；跳过早自习：${leadingStudyRow ? '是' : '否'}`)
+  if (leadingStudyRow) rawLines.push('检测到早自习行，已跳过，不计入第一节')
   const recognizedCells = new Map<string, { course: string; raw: string }>()
-  const totalCells = periodRows.length * 5
+  const totalCells = courseRows.length * 5
   let completed = 0
   let activePageSegmentation = '7'
 
@@ -455,8 +548,8 @@ async function recognizeGridTimetable(
     return total > 0 && darkCount / total > 0.18
   }
 
-  for (let rowIndex = 0; rowIndex < periodRows.length; rowIndex += 1) {
-    const row = periodRows[rowIndex]
+  for (let rowIndex = 0; rowIndex < courseRows.length; rowIndex += 1) {
+    const row = courseRows[rowIndex]
     const rowHeight = row.bottom - row.top
     for (let column = 0; column < 5; column += 1) {
       const left = dayBounds[column] + 3
@@ -499,6 +592,86 @@ async function recognizeGridTimetable(
           course = candidate
           break
         }
+      }
+
+      // 对空白结果额外尝试放大原图与稀疏文本模式。
+      // 只在原有多轮识别都没有命中时运行，不改变其他已正确识别的课程。
+      if (!course) {
+        for (const scale of [2, 3]) {
+          for (const segmentation of ['6', '11']) {
+            if (activePageSegmentation !== segmentation) {
+              await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+              activePageSegmentation = segmentation
+            }
+            const retryBlob = await createOriginalCell(source, left, top, right, bottom, scale)
+            const retryResult = await worker.recognize(retryBlob, {}, { text: true })
+            const retryRaw = String(retryResult.data?.text ?? '').replace(/\s+/g, '')
+            if (retryRaw) rawValues.push(retryRaw)
+            bestCourse = preferCourse(retryRaw, matchGridCourse(retryRaw), bestCourse)
+            course = bestCourse.name
+            if (course) break
+          }
+          if (course) break
+        }
+      }
+
+      // 换行课程（如“班会与 / 心理健康”）可能被单行 OCR 只读成“班会”。
+      // 仅在本格已有“班会”证据时，补读下半格；只有识别到“心理健康”才合并。
+      if (rawValues.some((value) => value.includes('班会')) &&
+          !rawValues.some((value) => value.includes('心理健康'))) {
+        const lowerTop = Math.min(bottom - 8, top + Math.floor((bottom - top) * 0.35))
+        for (const segmentation of ['6', '11']) {
+          if (activePageSegmentation !== segmentation) {
+            await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+            activePageSegmentation = segmentation
+          }
+          const lowerBlob = await createOriginalCell(source, left, lowerTop, right, bottom, 2)
+          const lowerResult = await worker.recognize(lowerBlob, {}, { text: true })
+          const lowerRaw = String(lowerResult.data?.text ?? '').replace(/\s+/g, '')
+          if (lowerRaw) rawValues.push(lowerRaw)
+          if (lowerRaw.includes('心理健康')) break
+        }
+      }
+      if (rawValues.some((value) => value.includes('班会')) &&
+          rawValues.some((value) => value.includes('心理健康'))) {
+        const originalDot = rawValues.some((value) => /班会[·•・]心理健康/.test(value))
+        const originalAnd = rawValues.some((value) => /班会与心理健康|班会与$|^与心理健康/.test(value))
+        const combined = originalDot && !originalAnd ? '班会 · 心理健康' : '班会与心理健康'
+        course = rawValues.some((value) => value.includes('升旗'))
+          ? `${combined}（含升旗仪式）` : combined
+      }
+
+      // “英语/英语口语”是同一单元格的完整课程名，不能只保留 OCR
+      // 多次识别中先命中的“英语”或“英语口语”。尝试对完整格进行稀疏文本识别，
+      // 并综合本格各次识别结果；仅有双课程或分隔符证据时才合并。
+      if (rawValues.some((value) => value.includes('英语')) &&
+          !rawValues.some((value) => /英语\s*[/／、|｜]\s*英语口语/.test(value))) {
+        for (const segmentation of ['11', '3']) {
+          if (activePageSegmentation !== segmentation) {
+            await worker.setParameters({ tessedit_pageseg_mode: segmentation })
+            activePageSegmentation = segmentation
+          }
+          const englishBlob = await createOriginalCell(source, left, top, right, bottom, 2)
+          const englishResult = await worker.recognize(englishBlob, {}, { text: true })
+          const englishRaw = String(englishResult.data?.text ?? '').replace(/\s+/g, '')
+          if (englishRaw) rawValues.push(englishRaw)
+          if (/英语\s*[/／、|｜]\s*英语口语/.test(englishRaw)) break
+        }
+      }
+      // 实际识别原文中，周一第5节出现“英语上语口语”“英庄&语口语”
+      // “英语|不语口语”：OCR 将分隔符及第二个“英”误读。
+      // 仅当同一个单元格里同时出现前缀和“语口语”后缀时纠正，
+      // 不把单独的“英语”或“英语口语”强制改为组合课程。
+      const englishWrapped = rawValues.some((value) =>
+        /英语.{0,3}语口语|英[语庄].{0,3}语口语/.test(value))
+      const englishFull = rawValues.some((value) =>
+        /英语\s*[/／、|｜]\s*英语口语|英语英语口语/.test(value))
+      const englishSlash = rawValues.some((value) => /英语\s*[/／|｜]/.test(value))
+      const englishSpoken = rawValues.some((value) => value.includes('英语口语'))
+      const englishPlain = rawValues.some((value) => /英语(?!口语)/.test(value))
+      if (englishFull || englishWrapped || (englishSlash && englishSpoken) ||
+          (englishPlain && englishSpoken && rawValues.some((value) => /[/／|｜]/.test(value)))) {
+        course = '英语/英语口语'
       }
 
       // 第 7 节一格内会再用竖线分成左右两个课程，例如“延时服务｜素质拓展”。
@@ -553,13 +726,13 @@ async function recognizeGridTimetable(
 
   // 课程表会使用纵向合并单元格（本图周一第 6、7 节的“身心成长”）。
   // 只有当相邻两行之间在该列确实没有横线时才向下延展，避免把普通空课误填成上一节课程。
-  for (let rowIndex = 1; rowIndex < periodRows.length; rowIndex += 1) {
+  for (let rowIndex = 1; rowIndex < courseRows.length; rowIndex += 1) {
     for (let column = 0; column < 5; column += 1) {
       const currentKey = `${column + 1}-${rowIndex + 1}`
       if (recognizedCells.has(currentKey)) continue
       const previousKey = `${column + 1}-${rowIndex}`
       const previous = recognizedCells.get(previousKey)
-      const boundary = periodRows[rowIndex].top
+      const boundary = courseRows[rowIndex].top
       if (!previous || hasCellDivider(dayBounds[column], dayBounds[column + 1], boundary)) continue
       recognizedCells.set(currentKey, { course: previous.course, raw: `${previous.raw}（合并单元格）` })
       rawLines.push(`${DAY_NAMES[column + 1]} 第${rowIndex + 1}节：${previous.course}（合并单元格） → ${previous.course}`)
@@ -716,7 +889,11 @@ function inferSlotsFromOcr(data: any): { slots: Slot[]; candidates: string[]; ra
   }
 }
 
-export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: Slot[]; onClose: () => void; onSave: (slots: Slot[], mode: 'replace' | 'append') => void }) {
+export function ImportSheet({ currentSlots, onClose, onSave }: {
+  currentSlots: Slot[]
+  onClose: () => void
+  onSave: (slots: Slot[], mode: 'replace' | 'append', selectedDay: number) => Promise<void>
+}) {
   const [step, setStep] = useState<ImportStep>('pick')
   const [preview, setPreview] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -726,7 +903,10 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
   const [candidates, setCandidates] = useState<string[]>([])
   const [ocrText, setOcrText] = useState('')
   const [day, setDay] = useState(1)
+  const [lastEditedTimeDay, setLastEditedTimeDay] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
@@ -742,6 +922,43 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
     if (existing) setDraft(name.trim() ? draft.map((slot) => slot.id === existing.id ? { ...slot, name } : slot) : draft.filter((slot) => slot.id !== existing.id))
     else if (name.trim()) setDraft([...draft, { id: uid(), day, period, name }])
   }
+  const updateDraftTime = (period: number, field: 'startTime' | 'endTime', value: string) => {
+    setLastEditedTimeDay(day)
+    setDraft((current) => current.map((slot) =>
+      slot.day === day && slot.period === period
+        ? { ...slot, [field]: value || undefined }
+        : slot,
+    ))
+  }
+  const clearDraftTime = (period: number) => {
+    setDraft((current) => current.map((slot) =>
+      slot.day === day && slot.period === period
+        ? { ...slot, startTime: undefined, endTime: undefined }
+        : slot,
+    ))
+  }
+  // When re-importing the timetable, keep manually entered hours for the same weekday/period.
+  // Parents can still edit or clear them in the review step before replacing the old schedule.
+  const retainExistingTimes = (recognized: Slot[]): Slot[] => recognized.map((slot) => {
+    const existing = currentSlots.find((saved) => saved.day === slot.day && saved.period === slot.period)
+    return existing ? { ...slot, startTime: existing.startTime, endTime: existing.endTime } : slot
+  })
+  const invalidTimeCount = draft.filter((slot) => Boolean(courseTimeError(slot))).length
+  const saveDraft = async () => {
+    if (saving || !draft.length || invalidTimeCount) return
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onSave(draft, currentSlots.length ? 'replace' : 'append', lastEditedTimeDay ?? day)
+    } catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : '保存出现异常，请稍后再试')
+    } finally {
+      setSaving(false)
+    }
+  }
+  const timedCourseCount = draft.filter((slot) => Boolean(slot.startTime && slot.endTime && !courseTimeError(slot))).length
+  const confirmLeaveReview = () => !saving && (step !== 'review' || !draft.length ||
+    window.confirm('课程和上课时间还未保存。确定放弃修改并离开吗？'))
   const recognize = async () => {
     if (!file) return
     setStep('reading')
@@ -770,10 +987,16 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         user_defined_dpi: '300',
       })
       cellRecognition = true
-      const gridResult = await recognizeGridTimetable(file, worker, (nextProgress, nextStatus) => {
-        setProgress(nextProgress)
-        setStatus(nextStatus)
-      })
+      // 网格检测失败不应导致整次导入失败：保留原有整图识别兜底。
+      let gridResult: Awaited<ReturnType<typeof recognizeGridTimetable>> = null
+      try {
+        gridResult = await recognizeGridTimetable(file, worker, (nextProgress, nextStatus) => {
+          setProgress(nextProgress)
+          setStatus(nextStatus)
+        })
+      } catch (gridError) {
+        console.warn('课程表网格识别失败，尝试整图识别', gridError)
+      }
       let inferred: { slots: Slot[]; candidates: string[]; rawText: string }
       // 只要网格定位成功且至少读到一格，就保留逐格结果。
       // 低于 8 格并不代表网格失败：空课、合并格和低对比度单元格都可能让数量暂时偏少；
@@ -792,16 +1015,17 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
         const result = await worker.recognize(file, { rotateAuto: true }, { blocks: true, text: true })
         inferred = inferSlotsFromOcr(result.data)
       }
-      setDraft(inferred.slots)
+      setDraft(retainExistingTimes(inferred.slots))
       setCandidates(inferred.candidates)
       setOcrText(inferred.rawText)
       setStep('review')
     } catch (reason) {
       console.error(reason)
       setStep('pick')
-      setError(worker
-        ? '识别没有成功。你可以换一张更清晰、拍正的图片重试，或直接填写课程。'
-        : '识别程序加载失败，请刷新页面后重试。')
+      const detail = reason instanceof Error ? reason.message : String(reason ?? '')
+      setError((worker
+        ? '识别没有成功。'
+        : '识别程序加载失败。') + (detail ? ` 错误信息：${detail.slice(0, 180)}` : ' 请刷新页面后重试。'))
     } finally {
       if (worker) await worker.terminate().catch(() => undefined)
     }
@@ -814,7 +1038,7 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
       [4, 1, '语文'], [4, 2, '科学'], [4, 4, '英语'], [4, 6, '体育'],
       [5, 1, '数学'], [5, 2, '语文'], [5, 3, '英语'], [5, 5, '班会'],
     ]
-    setDraft(sample.map(([itemDay, period, name]) => ({ id: uid(), day: itemDay, period, name })))
+    setDraft(retainExistingTimes(sample.map(([itemDay, period, name]) => ({ id: uid(), day: itemDay, period, name }))))
     setCandidates(['语文', '数学', '英语', '科学', '体育', '音乐', '美术', '班会'])
     setOcrText('语文 数学 英语 科学 体育 音乐 美术 班会（示例数据）')
     setStep('review')
@@ -828,9 +1052,9 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
       <div className="sheet import-sheet">
         <div className="sheet-handle" />
         <div className="sheet-header">
-          {step !== 'pick' ? <button className="icon-button" onClick={() => setStep('pick')}><ChevronLeft size={21} /></button> : <div />}
+          {step !== 'pick' ? <button className="icon-button" onClick={() => { if (confirmLeaveReview()) setStep('pick') }}><ChevronLeft size={21} /></button> : <div />}
           <div className="sheet-heading"><h2>{step === 'review' ? '校对课程表' : '上传课程表'}</h2>{step === 'pick' && <p className="sheet-subtitle">拍下课程表，闪闪来帮你整理呀</p>}</div>
-          <button className="icon-button" onClick={onClose}><X size={21} /></button>
+          <button className="icon-button" onClick={() => { if (confirmLeaveReview()) onClose() }}><X size={21} /></button>
         </div>
         {step === 'pick' && (
           <div className="sheet-body">
@@ -863,20 +1087,60 @@ export function ImportSheet({ currentSlots, onClose, onSave }: { currentSlots: S
               <ListChecks size={18} />
               <p>
                 <strong>{draft.length ? `已帮你整理好 ${draft.length} 节课` : candidates.length ? '识别到课程名，但无法确定位置' : '图片文字不够清晰'}</strong>
-                <span>{draft.length ? '请按星期检查，点错的地方可以直接修改。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
+                <span>{draft.length ? '请核对课程和上课时间。时间选填；修改后请点击底部“保存课程表”，才会在课表页生效。' : candidates.length ? '选择星期，再点下方课程名，或直接填写对应节次。' : '可以返回重拍，或者在下方直接填写课程。'}</span>
               </p>
             </div>
             <div className="day-tabs compact">{SCHOOL_DAYS.map((item) => <button key={item} className={day === item ? 'active' : ''} onClick={() => setDay(item)}><span>{DAY_NAMES[item].slice(1)}</span></button>)}</div>
             <div className="period-list compact-list">{PERIODS.map((period) => {
               const slot = draft.find((item) => item.day === day && item.period === period)
-              return <label className="period-row" key={`${day}-${period}`}><span>{period}</span><input value={slot?.name ?? ''} onChange={(event) => updateDraft(period, event.target.value)} placeholder="无课程" /></label>
+              return (
+                <div className="period-row" key={`${day}-${period}`}>
+                  <span>{period}</span>
+                  <div className="import-course-edit">
+                    <input
+                      className="import-course-name"
+                      value={slot?.name ?? ''}
+                      onChange={(event) => updateDraft(period, event.target.value)}
+                      placeholder="无课程"
+                      aria-label={`${DAY_NAMES[day]}第${period}节课程名称`}
+                    />
+                    {slot && (
+                      <CourseTimeFields
+                        period={period}
+                        startTime={slot.startTime}
+                        endTime={slot.endTime}
+                        onStartChange={(value) => updateDraftTime(period, 'startTime', value)}
+                        onEndChange={(value) => updateDraftTime(period, 'endTime', value)}
+                        onClear={() => clearDraftTime(period)}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
             })}</div>
             {candidates.length > 0 && <div className="candidate-box"><p><strong>快速补充课程</strong><span>点击添加到{DAY_NAMES[day]}</span></p><div>{candidates.slice(0, 20).map((name) => <button key={name} onClick={() => { const empty = PERIODS.find((period) => !draft.some((slot) => slot.day === day && slot.period === period)); if (empty) updateDraft(empty, name) }}>{name}<Plus size={13} /></button>)}</div></div>}
             <details className="ocr-details">
               <summary>查看识别原文（{ocrText.length} 个字）</summary>
               <pre>{ocrText || '没有读取到文字。请换一张更清晰、正面拍摄的图片重试。'}</pre>
             </details>
-            <button className="primary-button wide" disabled={!draft.length} onClick={() => onSave(draft, currentSlots.length ? 'replace' : 'append')}>保存课程表</button>
+          </div>
+        )}
+        {step === 'review' && (
+          <div className="import-save-footer">
+            <div className="import-save-hint" role="status">
+              {invalidTimeCount > 0
+                ? `有 ${invalidTimeCount} 节课时间未填完整或无效，请先修正或清空`
+                : `共 ${draft.length} 节课 · ${timedCourseCount} 节已设置时间 · 保存后生效`}
+            </div>
+            {saveError && <p className="import-save-error" role="alert">{saveError}</p>}
+            <button
+              type="button"
+              className="primary-button wide"
+              disabled={saving || !draft.length || invalidTimeCount > 0}
+              onClick={() => void saveDraft()}
+            >
+              {saving ? '正在保存课程与时间…' : '保存课程表'}
+            </button>
           </div>
         )}
       </div>

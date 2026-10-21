@@ -1,4 +1,12 @@
-export type Slot = { id: string; day: number; period: number; name: string }
+// Optional per-course clock time (HH:mm); older saved timetables have no time fields.
+export type Slot = {
+  id: string
+  day: number
+  period: number
+  name: string
+  startTime?: string
+  endTime?: string
+}
 export type DateNote = { id: string; date: string; text: string }
 export type ReminderSettings = { enabled: boolean; time: string; lastSent: string }
 export type HomeDay = 'today' | 'tomorrow'

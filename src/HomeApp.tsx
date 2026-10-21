@@ -7,7 +7,8 @@ import { DailyGoalsCard } from './components/home/DailyGoalsCard'
 import { HomeCourseCard } from './components/home/HomeCourseCard'
 import { resolveCourseIcon } from './features/home/courseIconMap'
 import { StarRewardBanner } from './components/home/StarRewardBanner'
-import { mockCourseStatuses } from './features/home/homeMock'
+import { courseStatusAt } from './coursePresentation'
+import { useCourseClock } from './useCourseClock'
 import { defaultHomeDay, homeTarget, type DateNote, type HomeDay, type ReminderSettings, type Slot } from './domain'
 
 const loadDeferredViews = () => import('./features/DeferredViews')
@@ -18,11 +19,32 @@ const ImportSheet = lazy(() => import('./features/ImportSheet').then((module) =>
 type Tab = 'home' | 'schedule' | 'settings'
 type CloudState = { hasState: boolean; slots: Slot[]; notes: DateNote[]; reminder: ReminderSettings }
 
-const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder' }
+const STORAGE = { slots: 'bag-plan.slots', notes: 'bag-plan.notes', reminder: 'bag-plan.reminder', pendingImport: 'bag-plan.pending-import' }
 const DEVICE_TOKEN_KEY = 'bag-plan.device-token'
 const DEFAULT_REMINDER: ReminderSettings = { enabled: false, time: '20:00', lastSent: '' }
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+// Vercel hosts the API in this same deployment; never forward to the old Sites backend.
+const API_BASE_URL = import.meta.env.MODE === 'vercel'
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+let deviceTokenPromise: Promise<string> | null = null
+
+async function ensureDeviceToken() {
+  const existing = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
+  if (existing) return existing
+  if (!deviceTokenPromise) {
+    deviceTokenPromise = apiRequest<{ token: string }>('/api/device', '', { method: 'POST' })
+      .then(({ token }) => {
+        if (!token || typeof token !== 'string') throw new Error('云端设备接口返回异常，请检查 API 后端')
+        localStorage.setItem(DEVICE_TOKEN_KEY, token)
+        return token
+      })
+      .finally(() => {
+        deviceTokenPromise = null
+      })
+  }
+  return deviceTokenPromise
+}
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -38,9 +60,29 @@ async function apiRequest<T>(path: string, token = '', init: RequestInit = {}): 
   if (token) headers.set('authorization', `Bearer ${token}`)
   if (init.body) headers.set('content-type', 'application/json')
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
-  const data = await response.json().catch(() => ({})) as T & { error?: string }
-  if (!response.ok) throw new Error(data.error || '云端服务暂时不可用')
+  const isJson = response.headers.get('content-type')?.includes('application/json')
+  const data = isJson ? await response.json().catch(() => ({})) as T & { error?: string } : ({} as T & { error?: string })
+  if (!response.ok) {
+    const explanation = response.status === 404
+      ? '云端接口不存在，请检查独立 API 地址和部署'
+      : response.status >= 500
+        ? '云端接口异常，请检查后端服务及数据库配置'
+        : `云端请求失败（${response.status}）`
+    throw new Error(data.error || explanation)
+  }
+  if (!isJson) throw new Error('云端接口未正确连接，返回的不是接口数据')
   return data
+}
+
+function matchesSavedClassTimes(expected: Slot[], received: Slot[]) {
+  if (expected.length !== received.length) return false
+  const saved = new Map(received.map((slot) => [`${slot.day}:${slot.period}`, slot]))
+  return expected.every((slot) => {
+    const actual = saved.get(`${slot.day}:${slot.period}`)
+    return actual?.name === slot.name &&
+      (actual?.startTime || '') === (slot.startTime || '') &&
+      (actual?.endTime || '') === (slot.endTime || '')
+  })
 }
 
 function urlBase64ToArrayBuffer(value: string) {
@@ -84,7 +126,7 @@ function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
   onSelectedDay: (day: HomeDay) => void
   onImport: () => void
 }) {
-  const now = new Date()
+  const now = useCourseClock()
   const target = homeTarget(now, selectedDay)
   const slots = allSlots.filter((slot) => slot.day === target.weekday).sort((a, b) => a.period - b.period)
   const [prepared, setPrepared] = useState(false)
@@ -114,7 +156,7 @@ function SmartHome({ allSlots, selectedDay, onSelectedDay, onImport }: {
             <span className="shine-course-empty-privacy"><Sparkles size={13} />图片只在你的设备上识别，不会上传保存</span>
           </article>
         )) : (
-          <><ul className="shine-course-list">{slots.map((slot, index) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={mockCourseStatuses[index % mockCourseStatuses.length]} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>固定作息时间 · 状态为示例</span></p></>
+          <><ul className="shine-course-list schedule-course-list">{slots.map((slot) => <HomeCourseCard key={slot.id} slot={slot} iconSrc={resolveCourseIcon(slot.name)} status={courseStatusAt(slot, target.date, now)} />)}</ul><p className="shine-course-caption">按上课顺序 · 共 {slots.length} 节课<span>时间可在课表页修改</span></p></>
         )}
 
         <StarRewardBanner />
@@ -132,6 +174,7 @@ export default function HomeApp() {
   const [notes, setNotes] = useState<DateNote[]>([])
   const [reminder, setReminder] = useState<ReminderSettings>(DEFAULT_REMINDER)
   const [importOpen, setImportOpen] = useState(false)
+  const [importFocus, setImportFocus] = useState<{ day: number; serial: number } | null>(null)
   const [toast, setToast] = useState('')
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [cloudReady, setCloudReady] = useState(false)
@@ -166,11 +209,7 @@ export default function HomeApp() {
     let cancelled = false
     const syncCloud = async () => {
       try {
-        let token = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
-        if (!token) {
-          const created = await apiRequest<{ token: string }>('/api/device', '', { method: 'POST' })
-          token = created.token; localStorage.setItem(DEVICE_TOKEN_KEY, token)
-        }
+        let token = await ensureDeviceToken()
         let state: CloudState
         try { state = await apiRequest<CloudState>('/api/state', token) }
         catch (error) {
@@ -181,12 +220,30 @@ export default function HomeApp() {
           state = await apiRequest<CloudState>('/api/state', token)
         }
         if (cancelled) return
-        if (state.hasState) {
+        // A timetable imported before a network request finishes must not be
+        // overwritten by an older cloud snapshot. Retry any unsynced import
+        // after reload before accepting remote slot data.
+        const pendingRaw = localStorage.getItem(STORAGE.pendingImport)
+        const pendingSlots = pendingRaw ? readStored<Slot[] | null>(STORAGE.pendingImport, null) : null
+        if (pendingSlots && Array.isArray(pendingSlots)) {
+          await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({
+            slots: pendingSlots, notes: localNotes,
+            reminder: { enabled: localReminder.enabled, time: localReminder.time },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+          }) })
+          if (localStorage.getItem(STORAGE.pendingImport) === pendingRaw) {
+            localStorage.removeItem(STORAGE.pendingImport)
+          }
+          if (cancelled) return
+          setSlots(pendingSlots)
+          setNotes(localNotes)
+          setReminder(localReminder)
+        } else if (state.hasState) {
           setSlots(state.slots); setNotes(state.notes ?? []); setReminder(state.reminder)
         } else {
           await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({ slots: localSlots, notes: localNotes, reminder: localReminder, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' }) })
         }
-        setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '后台提醒已开启' : '尚未开启')
+        setCloudReady(true); setCloudStatus('已同步到云端'); setPushStatus(state.reminder.enabled ? '通知订阅已开启，定时发送待配置' : '尚未开启')
       } catch { if (!cancelled) setCloudStatus('当前离线，数据已保存在手机') }
     }
     syncCloud()
@@ -208,6 +265,10 @@ export default function HomeApp() {
       setCloudStatus('正在同步…')
       try {
         await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({ slots, notes, reminder: { enabled: reminder.enabled, time: reminder.time }, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' }) })
+        // Only acknowledge the import pending flag for the exact timetable
+        // that the API just accepted. A newer edit must remain pending.
+        const pendingRaw = localStorage.getItem(STORAGE.pendingImport)
+        if (pendingRaw === JSON.stringify(slots)) localStorage.removeItem(STORAGE.pendingImport)
         setCloudStatus('已同步到云端')
       } catch { setCloudStatus('同步失败，联网后请重新打开应用') }
     }, 700)
@@ -229,16 +290,16 @@ export default function HomeApp() {
     if (isIos && !isStandalone) return showToast('请先添加到主屏幕，再从桌面打开并开启提醒')
     if (!('Notification' in window)) return showToast('当前浏览器不支持通知')
     try {
-      const token = localStorage.getItem(DEVICE_TOKEN_KEY) || ''
-      if (!token) throw new Error('云端连接尚未完成，请稍后重试')
+      // Request permission directly from the user gesture (required by iOS Home Screen apps).
       if (await Notification.requestPermission() !== 'granted') throw new Error('需要允许通知才能提醒你')
-      const registration = await navigator.serviceWorker.ready
       const config = await apiRequest<{ pushAvailable: boolean; vapidPublicKey: string }>('/api/config')
-      if (!config.pushAvailable) throw new Error('推送服务尚未配置完成')
+      if (!config.pushAvailable || !config.vapidPublicKey) throw new Error('后台推送密钥尚未配置，可先使用「添加到系统日历」')
+      const token = await ensureDeviceToken()
+      const registration = await navigator.serviceWorker.ready
       const existing = await registration.pushManager.getSubscription()
       const subscription = existing || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToArrayBuffer(config.vapidPublicKey) })
       await apiRequest('/api/push-subscriptions', token, { method: 'POST', body: JSON.stringify(subscription.toJSON()) })
-      setReminder((value) => ({ ...value, enabled: true })); setPushStatus('后台提醒已开启'); showToast('提醒已开启，测试通知已发送')
+      setReminder((value) => ({ ...value, enabled: true })); setPushStatus('通知订阅已开启，定时发送待配置'); showToast('测试通知已发送，请查看手机系统通知')
     } catch (error) { showToast(error instanceof Error ? error.message : '提醒开启失败') }
   }
 
@@ -273,14 +334,59 @@ export default function HomeApp() {
         <div className="page-content" ref={pageContentRef}>
           {!booted ? <HomeSkeleton /> : tab === 'home' ? <SmartHome allSlots={slots} selectedDay={selectedDay} onSelectedDay={setSelectedDay} onImport={() => setImportOpen(true)} /> : (
             <Suspense fallback={tab === 'schedule' ? <ScheduleSkeleton /> : <PanelSkeleton />}>
-              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} />}
+              {tab === 'schedule' && <SchedulePage slots={slots} onChange={setSlots} onImport={() => setImportOpen(true)} onNotify={showToast} importFocus={importFocus} />}
               {tab === 'settings' && <SettingsPage reminder={reminder} onReminderChange={setReminder} onEnable={enableReminder} onDisable={disableReminder} onCalendar={downloadCalendar} onInstall={installApp} cloudStatus={cloudStatus} pushStatus={pushStatus} isIos={isIos} isStandalone={isStandalone} onReset={() => { if (!window.confirm('确定清空课程和日期提醒吗？此操作无法撤销。')) return; setSlots([]); setNotes([]); showToast('数据已清空') }} />}
             </Suspense>
           )}
         </div>
         <nav className="bottom-nav" aria-label="主导航"><NavButton active={tab === 'home'} label="首页" icon={<Home />} onClick={() => selectTab('home')} /><NavButton active={tab === 'schedule'} label="课表" icon={<CalendarDays />} onClick={() => selectTab('schedule')} /><NavButton active={tab === 'settings'} label="设置" icon={<Settings />} onClick={() => selectTab('settings')} /></nav>
       </main>
-      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={(nextSlots, mode) => { setSlots(mode === 'replace' ? nextSlots : [...slots, ...nextSlots]); setImportOpen(false); selectTab('schedule'); showToast('课程表已保存') }} /></Suspense>}
+      {importOpen && <Suspense fallback={<div className="sheet-backdrop"><div className="sheet sheet-loading"><PanelSkeleton /></div></div>}><ImportSheet currentSlots={slots} onClose={() => setImportOpen(false)} onSave={async (nextSlots, mode, editedDay) => {
+        const savedSlots = mode === 'replace' ? nextSlots : [...slots, ...nextSlots]
+        const serialized = JSON.stringify(savedSlots)
+        const timedCount = savedSlots.filter((slot) => Boolean(slot.startTime && slot.endTime)).length
+
+        // First commit the exact draft to React and persistent local storage.
+        // Retain the pending marker until the cloud has confirmed all class hours.
+        try {
+          localStorage.setItem(STORAGE.slots, serialized)
+          localStorage.setItem(STORAGE.pendingImport, serialized)
+        } catch { /* Keep the React state even when storage is restricted. */ }
+        setSlots(savedSlots)
+
+        if (cloudReady) {
+          setCloudStatus('正在同步课程时间…')
+          try {
+            const token = await ensureDeviceToken()
+            await apiRequest('/api/state', token, { method: 'PUT', body: JSON.stringify({
+              slots: savedSlots, notes,
+              reminder: { enabled: reminder.enabled, time: reminder.time },
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+            }) })
+            const verified = await apiRequest<CloudState>('/api/state', token)
+            if (!matchesSavedClassTimes(savedSlots, verified.slots)) {
+              throw new Error('云端读取的课程时间与刚才保存的不一致')
+            }
+            if (localStorage.getItem(STORAGE.pendingImport) === serialized) {
+              localStorage.removeItem(STORAGE.pendingImport)
+            }
+            setCloudStatus('已同步到云端')
+          } catch (reason) {
+            setCloudStatus('课程时间尚未确认云端同步')
+            const detail = reason instanceof Error ? reason.message : '网络连接异常'
+            throw new Error(`已在手机保存修改，但云端未确认：${detail}。请保持页面打开并重试保存。`)
+          }
+        }
+
+        // Show exactly the weekday whose time was edited. Otherwise a Monday
+        // import can appear empty immediately after opening Tuesday's timetable.
+        setImportFocus({ day: editedDay, serial: Date.now() })
+        setImportOpen(false)
+        selectTab('schedule')
+        showToast(cloudReady
+          ? `已确认保存 ${savedSlots.length} 节课程，其中 ${timedCount} 节有时间`
+          : `已保存到手机：${timedCount} 节有时间，云端待同步`)
+      }} /></Suspense>}
       {toast && <div className="toast"><Check size={17} />{toast}</div>}
     </div>
   )

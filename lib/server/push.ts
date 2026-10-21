@@ -1,5 +1,6 @@
 import { buildPushPayload, type PushSubscription } from '@block65/webcrypto-web-push'
 import { getRuntimeEnv } from '@/db'
+import { getVapidSubject } from '@/lib/server/vapid'
 
 export async function sendWebPush(subscription: PushSubscription, data: Record<string, string>) {
   const env = getRuntimeEnv()
@@ -9,7 +10,7 @@ export async function sendWebPush(subscription: PushSubscription, data: Record<s
   const payload = await buildPushPayload(
     { data, options: { ttl: 60 * 60 * 12, urgency: 'normal' } },
     subscription,
-    { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: env.VAPID_SUBJECT },
+    { publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY, subject: getVapidSubject(env.VAPID_SUBJECT) },
   )
   return fetch(subscription.endpoint, payload as unknown as RequestInit)
 }
