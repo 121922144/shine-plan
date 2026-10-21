@@ -3,6 +3,7 @@ const iconRoot = '/course-icons'
 // 按顺序匹配；复合课程优先使用更明确的课程类型。
 // 新增课程时，在此补充别名或新增一项即可。
 export const courseIconMap = [
+  { names: ['基础托管课', '基础托管', '托管'], src: `${iconRoot}/basic-care.png` },
   { names: ['班会', '队会', '升旗'], src: `${iconRoot}/class-meeting.png` },
   { names: ['道德与法治', '道德', '法治', '品德'], src: `${iconRoot}/morality-law.png` },
   { names: ['综合实践', '劳动', '劳技', '实践'], src: `${iconRoot}/practical-labor.png` },
@@ -19,8 +20,8 @@ export const courseIconMap = [
   { names: ['无课程', '休息', '空课'], src: `${iconRoot}/no-course.png` },
 ] as const
 
-// 未匹配到课程时使用通用书本图标；与“无课程/休息”插画区分开。
-export const fallbackCourseIcon = `${iconRoot}/default-course.svg`
+// 未匹配到课程时使用新的通用书本图标；与“无课程/休息”插画区分开。
+export const fallbackCourseIcon = `${iconRoot}/default-course.png`
 
 export function resolveCourseIcon(name: string): string {
   const normalized = name.replace(/\s+/g, '')
